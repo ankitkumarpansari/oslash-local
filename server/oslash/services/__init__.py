@@ -7,6 +7,7 @@ from oslash.services.embeddings import (
 )
 from oslash.services.chunking import Chunker, Chunk, ChunkMetadata, get_chunker
 from oslash.services.search import SearchService, SearchResult, SearchResponse, get_search_service
+from oslash.services.chat import ChatEngine, ChatSession, Message, get_chat_engine
 
 __all__ = [
     "EmbeddingService",
@@ -20,5 +21,9 @@ __all__ = [
     "SearchResult",
     "SearchResponse",
     "get_search_service",
+    "ChatEngine",
+    "ChatSession",
+    "Message",
+    "get_chat_engine",
 ]
 

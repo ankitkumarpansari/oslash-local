@@ -16,6 +16,7 @@ from oslash.config import get_settings, Settings
 from oslash.db import init_db, get_db_context, crud
 from oslash.models.schemas import ServerStatus, AccountStatus, Source
 from oslash.vector import VectorStore, init_vector_store, get_vector_store
+from oslash.services.chat import get_chat_engine
 
 # Configure structured logging
 structlog.configure(
@@ -307,19 +308,37 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
 
             if data.get("type") == "question":
                 question = data.get("content", "")
+                sources_filter = data.get("sources")  # Optional source filter
                 logger.info("Chat question received", session_id=session_id, question=question[:50])
 
                 # Send start marker
                 await websocket.send_json({"type": "start"})
 
-                # TODO: Implement actual streaming with OpenAI
-                # For now, send a mock response
-                response = f"This is a streaming response to: {question}"
-                for word in response.split():
-                    await websocket.send_json({"type": "token", "content": word + " "})
+                # Get chat engine and stream response
+                chat_engine = get_chat_engine()
+                full_answer = ""
 
-                # Send sources
-                await websocket.send_json({"type": "sources", "sources": []})
+                try:
+                    async for token in chat_engine.answer_with_search(
+                        question=question,
+                        session_id=session_id,
+                        sources=sources_filter,
+                    ):
+                        full_answer += token
+                        await websocket.send_json({"type": "token", "content": token})
+
+                    # Get citations from session
+                    session = chat_engine.get_session(session_id)
+                    citations = []
+                    if session and session.messages:
+                        citations = session.messages[-1].sources
+
+                    # Send sources
+                    await websocket.send_json({"type": "sources", "sources": citations})
+
+                except Exception as e:
+                    logger.error("Chat streaming error", error=str(e))
+                    await websocket.send_json({"type": "error", "message": str(e)})
 
                 # Send end marker
                 await websocket.send_json({"type": "end"})
