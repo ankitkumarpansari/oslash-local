@@ -93,7 +93,7 @@ This project is being built incrementally. Check the [GitHub Issues](../../issue
 
 ## 📄 License
 
-MIT License - See [LICENSE](LICENSE) for details.
+Proprietary - All rights reserved © Ankit Pansari
 
 ## 🙏 Acknowledgments
 
