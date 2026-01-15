@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from oslash import __version__
 from oslash.api import auth, chat, search, sync
+from oslash.db import init_db, get_db_context, crud
 from oslash.models.schemas import ServerStatus, AccountStatus, Source
 
 # Configure structured logging
@@ -47,7 +48,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     logger.info("Starting OSlash Local server", version=__version__)
 
-    # TODO: Initialize database connections
+    # Initialize database
+    await init_db()
+    logger.info("Database initialized")
+
     # TODO: Initialize ChromaDB
     # TODO: Start background sync scheduler
 
@@ -55,7 +59,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Shutdown
     logger.info("Shutting down OSlash Local server")
-    # TODO: Close database connections
     # TODO: Stop background tasks
 
 
@@ -151,23 +154,38 @@ async def get_status() -> ServerStatus:
 
     Returns information about connected accounts, document counts, and sync status.
     """
-    # TODO: Get actual data from database
-    accounts = {}
-    for source in Source:
-        accounts[source.value] = AccountStatus(
-            connected=False,
-            email=None,
-            document_count=0,
-            last_sync=None,
-            status="idle",
-        )
+    async with get_db_context() as db:
+        # Get connected accounts
+        connected = await crud.get_all_connected_accounts(db)
+        connected_map = {acc.source: acc for acc in connected}
+
+        # Get sync states
+        sync_states = await crud.get_all_sync_states(db)
+        sync_map = {state.source: state for state in sync_states}
+
+        # Get total document count
+        total_docs = await crud.count_documents(db)
+
+        accounts = {}
+        for source in Source:
+            acc = connected_map.get(source.value)
+            sync_state = sync_map.get(source.value)
+            doc_count = await crud.count_documents(db, source.value)
+
+            accounts[source.value] = AccountStatus(
+                connected=acc is not None,
+                email=acc.email if acc else None,
+                document_count=doc_count,
+                last_sync=sync_state.last_synced_at if sync_state else None,
+                status=sync_state.status if sync_state else "idle",
+            )
 
     return ServerStatus(
         online=True,
         version=__version__,
         accounts=accounts,
-        total_documents=0,
-        total_chunks=0,
+        total_documents=total_docs,
+        total_chunks=0,  # TODO: Get from ChromaDB
     )
 
 
