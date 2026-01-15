@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from oslash import __version__
 from oslash.api import auth, chat, search, sync, vectors
+from oslash.config import get_settings, Settings
 from oslash.db import init_db, get_db_context, crud
 from oslash.models.schemas import ServerStatus, AccountStatus, Source
 from oslash.vector import VectorStore, init_vector_store, get_vector_store
@@ -46,8 +47,16 @@ logger = structlog.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application lifespan - startup and shutdown."""
+    # Load settings
+    settings = get_settings()
+
     # Startup
-    logger.info("Starting OSlash Local server", version=__version__)
+    logger.info(
+        "Starting OSlash Local server",
+        version=__version__,
+        data_dir=str(settings.data_dir),
+        openai_configured=settings.has_openai_key(),
+    )
 
     # Initialize database
     await init_db()
@@ -149,6 +158,34 @@ async def health_check() -> dict:
     return {
         "status": "healthy",
         "version": __version__,
+    }
+
+
+@app.get("/api/v1/config", tags=["Status"])
+async def get_config() -> dict:
+    """
+    Get current configuration status.
+
+    Shows which services are configured (without exposing secrets).
+    """
+    settings = get_settings()
+    return {
+        "version": __version__,
+        "data_dir": str(settings.data_dir),
+        "services": {
+            "openai": settings.has_openai_key(),
+            "google": settings.has_google_oauth(),
+            "slack": settings.has_slack_oauth(),
+            "hubspot": settings.has_hubspot_oauth(),
+        },
+        "configured_sources": settings.get_configured_sources(),
+        "settings": {
+            "embedding_model": settings.embedding_model,
+            "chat_model": settings.chat_model,
+            "sync_interval_minutes": settings.sync_interval_minutes,
+            "chunk_size": settings.chunk_size,
+            "default_results_count": settings.default_results_count,
+        },
     }
 
 
