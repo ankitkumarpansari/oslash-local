@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* OSlash Local Extension Styles */
+/* Following UI Skills constraints: no gradients, single accent color */
+
+:root {
+  --color-accent: theme("colors.zinc.900");
+  --color-accent-hover: theme("colors.zinc.800");
+}
+
+/* Ensure proper rendering in extension context */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+}
+

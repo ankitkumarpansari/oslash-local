@@ -60,30 +60,139 @@ OSlash Local lets you type `o/ {query}` anywhere in your browser to instantly fi
 
 ```
 oslash-local/
-├── server/              # FastAPI backend
+├── server/                     # FastAPI backend
 │   ├── oslash/
-│   │   ├── api/         # REST endpoints
-│   │   ├── core/        # RAG engine
-│   │   ├── connectors/  # Data source integrations
-│   │   ├── models/      # Data models
-│   │   └── db/          # Database layer
-│   └── tests/
-├── extension/           # Chrome extension
+│   │   ├── api/               # REST endpoints
+│   │   ├── core/              # RAG engine
+│   │   ├── connectors/        # Data source integrations
+│   │   ├── models/            # Data models
+│   │   ├── db/                # Database layer
+│   │   ├── main.py            # Entry point
+│   │   └── config.py          # Configuration
+│   ├── tests/
+│   ├── pyproject.toml
+│   └── requirements.txt
+├── extension/                  # Chrome extension
 │   ├── src/
-│   └── public/
-├── cli/                 # Terminal client
-└── docs/
+│   │   ├── content/           # Content script (o/ detection)
+│   │   ├── background/        # Service worker
+│   │   ├── popup/             # Extension popup UI
+│   │   ├── overlay/           # Search results overlay
+│   │   └── lib/               # Utilities
+│   ├── public/
+│   │   └── manifest.json
+│   ├── package.json
+│   └── vite.config.ts
+├── cli/                        # Terminal client
+│   ├── oslash_cli/
+│   │   ├── __main__.py        # CLI commands
+│   │   ├── app.py             # TUI application
+│   │   └── components/
+│   └── pyproject.toml
+├── docs/
+├── scripts/
+├── .env.example
+├── .pre-commit-config.yaml
+├── docker-compose.yml
+└── README.md
 ```
 
 ## 🚀 Getting Started
 
-*Coming soon - see GitHub Issues for development progress*
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- OpenAI API key
+
+### 1. Clone and Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/ankitkumarpansari/oslash-local.git
+cd oslash-local
+
+# Copy environment file
+cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY
+```
+
+### 2. Start the Server
+
+```bash
+cd server
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run server
+uvicorn oslash.main:app --reload
+```
+
+Server will be available at http://localhost:8000
+
+### 3. Build the Extension
+
+```bash
+cd extension
+
+# Install dependencies
+npm install
+
+# Build
+npm run build
+
+# Load in Chrome:
+# 1. Go to chrome://extensions
+# 2. Enable "Developer mode"
+# 3. Click "Load unpacked"
+# 4. Select the extension/dist folder
+```
+
+### 4. Install CLI (Optional)
+
+```bash
+cd cli
+
+# Install in development mode
+pip install -e .
+
+# Run TUI
+oslash tui
+
+# Or quick search
+oslash search "your query"
+```
 
 ## 📋 Development
 
-This project is being built incrementally. Check the [GitHub Issues](../../issues) for the complete roadmap organized by epics:
+### Running Tests
 
-- **Epic 1**: Project Foundation & Infrastructure
+```bash
+cd server
+pytest
+```
+
+### Code Formatting
+
+```bash
+# Install pre-commit hooks
+pip install pre-commit
+pre-commit install
+
+# Run manually
+pre-commit run --all-files
+```
+
+## 📋 Roadmap
+
+See [GitHub Issues](https://github.com/ankitkumarpansari/oslash-local/issues) for the complete roadmap organized by epics:
+
+- **Epic 1**: Project Foundation & Infrastructure ✅
 - **Epic 2**: Core RAG Engine
 - **Epic 3**: Data Connectors
 - **Epic 4**: Browser Extension
@@ -99,4 +208,3 @@ Proprietary - All rights reserved © Ankit Pansari
 
 - Inspired by [OSlash.com](https://oslash.com)
 - Architecture patterns from [Ramp's Inspect](https://builders.ramp.com/post/why-we-built-our-background-agent)
-
