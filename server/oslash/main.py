@@ -11,9 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from oslash import __version__
-from oslash.api import auth, chat, search, sync
+from oslash.api import auth, chat, search, sync, vectors
 from oslash.db import init_db, get_db_context, crud
 from oslash.models.schemas import ServerStatus, AccountStatus, Source
+from oslash.vector import VectorStore, init_vector_store, get_vector_store
 
 # Configure structured logging
 structlog.configure(
@@ -52,7 +53,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db()
     logger.info("Database initialized")
 
-    # TODO: Initialize ChromaDB
+    # Initialize ChromaDB
+    vector_store = init_vector_store()
+    stats = vector_store.get_stats()
+    logger.info("ChromaDB initialized", total_chunks=stats.total_chunks)
+
     # TODO: Start background sync scheduler
 
     yield
@@ -180,12 +185,16 @@ async def get_status() -> ServerStatus:
                 status=sync_state.status if sync_state else "idle",
             )
 
+    # Get ChromaDB stats
+    vector_store = get_vector_store()
+    chroma_stats = vector_store.get_stats()
+
     return ServerStatus(
         online=True,
         version=__version__,
         accounts=accounts,
         total_documents=total_docs,
-        total_chunks=0,  # TODO: Get from ChromaDB
+        total_chunks=chroma_stats.total_chunks,
     )
 
 
@@ -290,6 +299,7 @@ app.include_router(search.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(sync.router, prefix="/api/v1")
+app.include_router(vectors.router, prefix="/api/v1")
 
 
 # =============================================================================
