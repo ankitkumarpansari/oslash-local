@@ -1,11 +1,12 @@
 """Search API endpoints."""
 
-import time
 from typing import Optional
 
 from fastapi import APIRouter, Query
 
+from oslash.db import get_db_context, crud
 from oslash.models.schemas import SearchRequest, SearchResponse, SearchResult, Source
+from oslash.services.search import get_search_service
 
 router = APIRouter(prefix="/search", tags=["Search"])
 
@@ -19,19 +20,49 @@ async def search(request: SearchRequest) -> SearchResponse:
     - **limit**: Maximum results to return (1-100, default 10)
     - **sources**: Optional filter by sources (gdrive, gmail, slack, hubspot)
     """
-    start_time = time.time()
+    search_service = get_search_service()
 
-    # TODO: Implement actual search with embeddings + ChromaDB
-    # For now, return mock results
-    results: list[SearchResult] = []
+    # Convert source enum to strings
+    source_filter = None
+    if request.sources:
+        source_filter = [s.value for s in request.sources]
 
-    elapsed_ms = (time.time() - start_time) * 1000
+    # Perform search
+    response = await search_service.search(
+        query=request.query,
+        sources=source_filter,
+        limit=request.limit,
+    )
+
+    # Log search to history
+    async with get_db_context() as db:
+        await crud.add_search_history(
+            db,
+            query=request.query,
+            result_count=response.total_found,
+        )
+
+    # Convert to API response format
+    results = [
+        SearchResult(
+            id=r.document_id,
+            title=r.title,
+            source=Source(r.source),
+            path=r.path,
+            author=r.author,
+            snippet=r.snippet,
+            url=r.url or "",
+            score=r.score,
+            modified_at=r.modified_at,
+        )
+        for r in response.results
+    ]
 
     return SearchResponse(
-        query=request.query,
+        query=response.query,
         results=results,
-        total_found=len(results),
-        search_time_ms=round(elapsed_ms, 2),
+        total_found=response.total_found,
+        search_time_ms=response.search_time_ms,
     )
 
 
@@ -43,8 +74,10 @@ async def get_suggestions(
     """
     Get search suggestions based on partial query.
     """
-    # TODO: Implement with search history and popular queries
-    return {"query": q, "suggestions": []}
+    async with get_db_context() as db:
+        suggestions = await crud.get_search_suggestions(db, q, limit)
+
+    return {"query": q, "suggestions": list(suggestions)}
 
 
 @router.get("/history")
@@ -54,8 +87,19 @@ async def get_search_history(
     """
     Get recent search history.
     """
-    # TODO: Implement with database
-    return {"history": []}
+    async with get_db_context() as db:
+        history = await crud.get_search_history(db, limit)
+
+    return {
+        "history": [
+            {
+                "query": h.query,
+                "searched_at": h.searched_at.isoformat(),
+                "result_count": h.result_count,
+            }
+            for h in history
+        ]
+    }
 
 
 @router.delete("/history")
@@ -63,6 +107,7 @@ async def clear_search_history() -> dict:
     """
     Clear search history.
     """
-    # TODO: Implement with database
-    return {"message": "History cleared"}
+    async with get_db_context() as db:
+        count = await crud.clear_search_history(db)
 
+    return {"message": f"Cleared {count} search history entries"}
