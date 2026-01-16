@@ -204,17 +204,13 @@ function SearchResults({
       <p className="text-xxs text-text-tertiary mb-3">
         {results.length} results · {searchTime}ms
       </p>
-      {results.map((result, index) => (
+      {results.map((result) => (
         <a
           key={result.chunk_id}
           href={result.url || "#"}
           target="_blank"
           rel="noopener noreferrer"
-          className={cn(
-            "block px-3 py-2.5 rounded-md hover:bg-bg-hover group transition-colors",
-            "animate-slide-up"
-          )}
-          style={{ animationDelay: `${index * 30}ms`, opacity: 0 }}
+          className="block px-3 py-2.5 rounded-md hover:bg-bg-hover group transition-colors"
         >
           <div className="flex items-start gap-2.5">
             <img 
