@@ -377,6 +377,9 @@ def setup_static_files():
     if WEB_UI_DIR.exists() and (WEB_UI_DIR / "index.html").exists():
         # Mount static assets (JS, CSS, images)
         app.mount("/assets", StaticFiles(directory=WEB_UI_DIR / "assets"), name="assets")
+        # Mount icons
+        if (WEB_UI_DIR / "icons").exists():
+            app.mount("/icons", StaticFiles(directory=WEB_UI_DIR / "icons"), name="icons")
         logger.info("Web UI mounted", path=str(WEB_UI_DIR))
         return True
     else:
