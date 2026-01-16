@@ -16,13 +16,15 @@ _active_syncs: dict[str, bool] = {}
 
 async def run_connector_sync(source: str, full: bool = False) -> SyncResult:
     """Run sync for a specific source."""
-    from oslash.connectors import create_gdrive_connector, create_gmail_connector
+    from oslash.connectors import create_gdrive_connector, create_gmail_connector, create_slack_connector
 
     # Create the appropriate connector
     if source == "gdrive":
         connector = create_gdrive_connector()
     elif source == "gmail":
         connector = create_gmail_connector()
+    elif source == "slack":
+        connector = create_slack_connector()
     else:
         return SyncResult(
             success=False,
@@ -102,11 +104,8 @@ async def run_sync_task(source: Source, full: bool = False) -> SyncResult:
             await crud.update_sync_state(db, source_name, status="syncing")
 
         # Run the appropriate connector
-        if source in [Source.GDRIVE, Source.GMAIL]:
+        if source in [Source.GDRIVE, Source.GMAIL, Source.SLACK]:
             result = await run_connector_sync(source.value, full)
-        elif source == Source.SLACK:
-            # TODO: Implement Slack sync
-            result = SyncResult(success=False, source=source, errors=["Slack sync not implemented"])
         elif source == Source.HUBSPOT:
             # TODO: Implement HubSpot sync
             result = SyncResult(success=False, source=source, errors=["HubSpot sync not implemented"])
