@@ -14,20 +14,37 @@ router = APIRouter(prefix="/sync", tags=["Sync"])
 _active_syncs: dict[str, bool] = {}
 
 
-async def run_gdrive_sync(full: bool = False) -> SyncResult:
-    """Run Google Drive sync."""
-    from oslash.connectors.gdrive import create_gdrive_connector
+async def run_connector_sync(source: str, full: bool = False) -> SyncResult:
+    """Run sync for a specific source."""
+    from oslash.connectors import create_gdrive_connector, create_gmail_connector
 
-    connector = create_gdrive_connector()
+    # Create the appropriate connector
+    if source == "gdrive":
+        connector = create_gdrive_connector()
+    elif source == "gmail":
+        connector = create_gmail_connector()
+    else:
+        return SyncResult(
+            success=False,
+            source=Source(source),
+            errors=[f"Connector not implemented for {source}"],
+        )
+
+    return await _run_connector(connector, source, full)
+
+
+async def _run_connector(connector, source: str, full: bool = False) -> SyncResult:
+    """Run a connector with credentials from database."""
+    from oslash.connectors.base import BaseConnector
 
     # Get credentials from database
     async with get_db_context() as db:
-        account = await crud.get_connected_account(db, "gdrive")
+        account = await crud.get_connected_account(db, source)
         if not account or not account.token_encrypted:
             return SyncResult(
                 success=False,
-                source=Source.GDRIVE,
-                errors=["Google Drive not connected"],
+                source=Source(source),
+                errors=[f"{source} not connected"],
             )
 
         # TODO: Decrypt token
@@ -38,7 +55,7 @@ async def run_gdrive_sync(full: bool = False) -> SyncResult:
         except:
             return SyncResult(
                 success=False,
-                source=Source.GDRIVE,
+                source=Source(source),
                 errors=["Invalid credentials"],
             )
 
@@ -46,7 +63,7 @@ async def run_gdrive_sync(full: bool = False) -> SyncResult:
     if not await connector.authenticate(credentials):
         return SyncResult(
             success=False,
-            source=Source.GDRIVE,
+            source=Source(source),
             errors=["Authentication failed"],
         )
 
@@ -54,7 +71,7 @@ async def run_gdrive_sync(full: bool = False) -> SyncResult:
     result = await connector.sync(full=full)
     return SyncResult(
         success=result.success,
-        source=Source.GDRIVE,
+        source=Source(source),
         added=result.added,
         updated=result.updated,
         deleted=result.deleted,
@@ -85,11 +102,8 @@ async def run_sync_task(source: Source, full: bool = False) -> SyncResult:
             await crud.update_sync_state(db, source_name, status="syncing")
 
         # Run the appropriate connector
-        if source == Source.GDRIVE:
-            result = await run_gdrive_sync(full)
-        elif source == Source.GMAIL:
-            # TODO: Implement Gmail sync
-            result = SyncResult(success=False, source=source, errors=["Gmail sync not implemented"])
+        if source in [Source.GDRIVE, Source.GMAIL]:
+            result = await run_connector_sync(source.value, full)
         elif source == Source.SLACK:
             # TODO: Implement Slack sync
             result = SyncResult(success=False, source=source, errors=["Slack sync not implemented"])
