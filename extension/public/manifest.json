@@ -3,8 +3,16 @@
   "name": "OSlash Local",
   "version": "0.1.0",
   "description": "Search your files across Google Drive, Gmail, Slack, and HubSpot with o/ trigger",
-  "permissions": ["activeTab", "storage", "alarms"],
-  "host_permissions": ["http://localhost:8000/*"],
+  "permissions": ["activeTab", "storage", "alarms", "webNavigation", "tabs"],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*",
+    "https://www.google.com/*",
+    "https://www.bing.com/*",
+    "https://duckduckgo.com/*",
+    "https://search.yahoo.com/*"
+  ],
+  "omnibox": { "keyword": "o" },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
