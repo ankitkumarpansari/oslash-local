@@ -57,6 +57,9 @@ dependencies = [
     
     # Background jobs
     "apscheduler>=3.10.4",
+    
+    # PDF extraction
+    "pypdf>=4.0.0",
 ]
 
 [project.optional-dependencies]
