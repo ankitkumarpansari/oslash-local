@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback } from "preact/hooks";
+import { useState, useEffect, useCallback, useRef } from "preact/hooks";
 import { api } from "./lib/api";
 import { cn, formatRelativeTime, formatNumber, debounce } from "./lib/utils";
 import { parseQuery, getSourceDisplayName } from "./lib/queryParser";
 import type { ServerStatus, Source, SearchResult, SearchResponse } from "./lib/types";
 import { SOURCES } from "./lib/types";
+
+// View types
+type View = "search" | "chat";
 
 // =============================================================================
 // Icons
@@ -13,6 +16,16 @@ const Icons = {
   search: (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
       <path d="M7.333 12.667A5.333 5.333 0 1 0 7.333 2a5.333 5.333 0 0 0 0 10.667ZM14 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  chat: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M14 10.667a1.333 1.333 0 0 1-1.333 1.333H4l-2.667 2.667V3.333A1.333 1.333 0 0 1 2.667 2h10A1.333 1.333 0 0 1 14 3.333v7.334Z" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  send: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M14.667 1.333 7.333 8.667M14.667 1.333l-4.667 13.334-2.667-6L1.333 6l13.334-4.667Z" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
   sync: (
@@ -36,6 +49,21 @@ const Icons = {
       <path d="M12 8.667v4A1.333 1.333 0 0 1 10.667 14H3.333A1.333 1.333 0 0 1 2 12.667V5.333A1.333 1.333 0 0 1 3.333 4h4M10 2h4v4M6.667 9.333 14 2" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
+  sparkles: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M8 1.333v2M8 12.667v2M3.287 3.287l1.42 1.42M11.293 11.293l1.42 1.42M1.333 8h2M12.667 8h2M3.287 12.713l1.42-1.42M11.293 4.707l1.42-1.42" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  user: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M13.333 14v-1.333A2.667 2.667 0 0 0 10.667 10H5.333a2.667 2.667 0 0 0-2.666 2.667V14M8 7.333A2.667 2.667 0 1 0 8 2a2.667 2.667 0 0 0 0 5.333Z" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  newChat: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M8 3.333v9.334M3.333 8h9.334" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
 };
 
 // =============================================================================
@@ -47,11 +75,15 @@ function Sidebar({
   version,
   connectedCount,
   totalDocs,
+  currentView,
+  onViewChange,
 }: { 
   isOnline: boolean; 
   version: string;
   connectedCount: number;
   totalDocs: number;
+  currentView: View;
+  onViewChange: (view: View) => void;
 }) {
   return (
     <aside className="w-52 h-screen border-r border-border bg-bg-secondary flex flex-col fixed left-0 top-0">
@@ -68,10 +100,31 @@ function Sidebar({
       {/* Nav */}
       <nav className="flex-1 py-2 px-2">
         <div className="space-y-0.5">
-          <a href="#" className="flex items-center gap-2 px-2 py-1.5 text-sm text-white bg-bg-hover rounded-md">
+          <button 
+            onClick={() => onViewChange("search")}
+            className={cn(
+              "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
+              currentView === "search" 
+                ? "text-white bg-bg-hover" 
+                : "text-text-secondary hover:bg-bg-hover hover:text-white"
+            )}
+          >
             {Icons.search}
             <span>Search</span>
-          </a>
+          </button>
+          <button 
+            onClick={() => onViewChange("chat")}
+            className={cn(
+              "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
+              currentView === "chat" 
+                ? "text-white bg-bg-hover" 
+                : "text-text-secondary hover:bg-bg-hover hover:text-white"
+            )}
+          >
+            {Icons.chat}
+            <span>Ask AI</span>
+            <span className="ml-auto px-1.5 py-0.5 text-xxs bg-purple-500/20 text-purple-400 rounded">New</span>
+          </button>
         </div>
 
         <div className="mt-6 px-2">
@@ -388,6 +441,307 @@ function AccountRow({
 }
 
 // =============================================================================
+// Chat Message Component
+// =============================================================================
+
+interface ChatMessageData {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  sources?: string[];
+  timestamp: Date;
+}
+
+function ChatMessageBubble({ message }: { message: ChatMessageData }) {
+  const isUser = message.role === "user";
+  
+  return (
+    <div className={cn("flex gap-3", isUser ? "flex-row-reverse" : "flex-row")}>
+      <div className={cn(
+        "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0",
+        isUser ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"
+      )}>
+        {isUser ? Icons.user : Icons.sparkles}
+      </div>
+      <div className={cn(
+        "max-w-[80%] rounded-lg px-3 py-2",
+        isUser ? "bg-blue-500/10 text-white" : "bg-bg-tertiary text-white"
+      )}>
+        <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+        {message.sources && message.sources.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-border">
+            <p className="text-xxs text-text-tertiary mb-1">Sources:</p>
+            <div className="flex flex-wrap gap-1">
+              {message.sources.map((source, i) => (
+                <span key={i} className="px-1.5 py-0.5 text-xxs bg-bg-hover text-text-secondary rounded">
+                  {source}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Chat View Component
+// =============================================================================
+
+function ChatView() {
+  const [messages, setMessages] = useState<ChatMessageData[]>([]);
+  const [input, setInput] = useState("");
+  const [isConnected, setIsConnected] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const streamingContentRef = useRef("");
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, streamingContent]);
+
+  // Connect to WebSocket on mount
+  useEffect(() => {
+    api.connectChat(sessionId, {
+      onStart: () => {
+        setIsStreaming(true);
+        setStreamingContent("");
+        streamingContentRef.current = "";
+      },
+      onToken: (token) => {
+        streamingContentRef.current += token;
+        setStreamingContent(streamingContentRef.current);
+      },
+      onSources: (sources) => {
+        // Update the last assistant message with sources
+        setMessages(prev => {
+          const updated = [...prev];
+          // Find last assistant message index (ES5 compatible)
+          let lastAssistant = -1;
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].role === "assistant") {
+              lastAssistant = i;
+              break;
+            }
+          }
+          if (lastAssistant >= 0) {
+            updated[lastAssistant] = { ...updated[lastAssistant], sources };
+          }
+          return updated;
+        });
+      },
+      onEnd: () => {
+        setIsStreaming(false);
+        // Add the streamed content as a complete message using ref
+        const content = streamingContentRef.current;
+        if (content) {
+          setMessages(prev => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: content,
+              timestamp: new Date(),
+            }
+          ]);
+        }
+        setStreamingContent("");
+        streamingContentRef.current = "";
+      },
+      onError: (error) => {
+        console.error("Chat error:", error);
+        setIsStreaming(false);
+        setMessages(prev => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `Error: ${error}`,
+            timestamp: new Date(),
+          }
+        ]);
+        setStreamingContent("");
+        streamingContentRef.current = "";
+      },
+      onClose: () => {
+        setIsConnected(false);
+      },
+    });
+    setIsConnected(true);
+
+    return () => {
+      api.disconnectChat();
+    };
+  }, [sessionId]);
+
+  // Handle sending a message
+  const handleSend = useCallback(() => {
+    if (!input.trim() || isStreaming) return;
+
+    const userMessage: ChatMessageData = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: input.trim(),
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    api.sendChatMessage(input.trim());
+    setInput("");
+    inputRef.current?.focus();
+  }, [input, isStreaming]);
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setStreamingContent("");
+    setInput("");
+    inputRef.current?.focus();
+  };
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-49px)]">
+      {/* Chat Header */}
+      <div className="px-6 py-3 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+            {Icons.sparkles}
+          </div>
+          <div>
+            <h2 className="text-sm font-medium text-white">Ask AI</h2>
+            <p className="text-xxs text-text-tertiary">
+              {isConnected ? "Connected" : "Connecting..."}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={handleNewChat}
+          className="flex items-center gap-1.5 px-2 py-1 text-xs text-text-tertiary hover:text-white hover:bg-bg-hover rounded transition-colors"
+        >
+          {Icons.newChat}
+          New chat
+        </button>
+      </div>
+
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {messages.length === 0 && !isStreaming ? (
+          <div className="h-full flex flex-col items-center justify-center text-center">
+            <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 mb-4">
+              {Icons.sparkles}
+            </div>
+            <h3 className="text-sm font-medium text-white mb-1">Ask anything about your documents</h3>
+            <p className="text-xs text-text-tertiary max-w-sm">
+              I can help you find information, summarize content, or answer questions based on your connected sources.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2 justify-center">
+              {[
+                "What meetings do I have this week?",
+                "Summarize recent emails from Jeff",
+                "What companies are in HubSpot?",
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => {
+                    setInput(suggestion);
+                    inputRef.current?.focus();
+                  }}
+                  className="px-3 py-1.5 text-xs text-text-secondary bg-bg-tertiary hover:bg-bg-hover rounded-full transition-colors"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-2xl mx-auto space-y-4">
+            {messages.map((message) => (
+              <ChatMessageBubble key={message.id} message={message} />
+            ))}
+            {isStreaming && streamingContent && (
+              <div className="flex gap-3">
+                <div className="w-7 h-7 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 text-purple-400">
+                  {Icons.sparkles}
+                </div>
+                <div className="max-w-[80%] rounded-lg px-3 py-2 bg-bg-tertiary text-white">
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{streamingContent}</p>
+                  <span className="inline-block w-2 h-4 bg-purple-400 animate-pulse ml-0.5" />
+                </div>
+              </div>
+            )}
+            {isStreaming && !streamingContent && (
+              <div className="flex gap-3">
+                <div className="w-7 h-7 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 text-purple-400">
+                  {Icons.sparkles}
+                </div>
+                <div className="rounded-lg px-3 py-2 bg-bg-tertiary">
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </div>
+
+      {/* Input Area */}
+      <div className="px-6 py-4 border-t border-border">
+        <div className="max-w-2xl mx-auto">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
+            }}
+            className="relative"
+          >
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onInput={(e) => setInput((e.target as HTMLInputElement).value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask a question about your documents..."
+              disabled={isStreaming}
+              className="w-full h-10 pl-4 pr-12 text-sm bg-bg-tertiary border border-border rounded-lg text-white placeholder-text-tertiary focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || isStreaming}
+              className={cn(
+                "absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors",
+                input.trim() && !isStreaming
+                  ? "text-purple-400 hover:bg-purple-500/20"
+                  : "text-text-tertiary cursor-not-allowed"
+              )}
+            >
+              {Icons.send}
+            </button>
+          </form>
+          <p className="mt-2 text-xxs text-text-tertiary text-center">
+            AI responses are based on your connected documents. Results may not always be accurate.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // Offline State Component
 // =============================================================================
 
@@ -444,6 +798,7 @@ export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [currentView, setCurrentView] = useState<View>("search");
   
   // Search state
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -556,89 +911,97 @@ export function App() {
         version={status?.version ?? "0.1.0"}
         connectedCount={connectedCount}
         totalDocs={status?.total_documents ?? 0}
+        currentView={currentView}
+        onViewChange={setCurrentView}
       />
 
       <main className="ml-52 min-h-screen">
-        {/* Header */}
-        <header className="sticky top-0 z-10 bg-bg border-b border-border">
-          <div className="px-6 py-3 flex items-center justify-between">
-            <h1 className="text-sm font-medium text-white">Search</h1>
-            <a 
-              href="/docs" 
-              target="_blank"
-              className="flex items-center gap-1.5 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
-            >
-              API Docs
-              {Icons.external}
-            </a>
-          </div>
-        </header>
+        {currentView === "chat" ? (
+          <ChatView />
+        ) : (
+          <>
+            {/* Header */}
+            <header className="sticky top-0 z-10 bg-bg border-b border-border">
+              <div className="px-6 py-3 flex items-center justify-between">
+                <h1 className="text-sm font-medium text-white">Search</h1>
+                <a 
+                  href="/docs" 
+                  target="_blank"
+                  className="flex items-center gap-1.5 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+                >
+                  API Docs
+                  {Icons.external}
+                </a>
+              </div>
+            </header>
 
-        <div className="max-w-2xl mx-auto px-6 py-6">
-          {/* Search */}
-          <SearchBar onSearch={handleSearch} isSearching={isSearching} activeSource={activeSource} />
+            <div className="max-w-2xl mx-auto px-6 py-6">
+              {/* Search */}
+              <SearchBar onSearch={handleSearch} isSearching={isSearching} activeSource={activeSource} />
 
-          {/* Search Results */}
-          {searchQuery ? (
-            <div className="mt-6">
-              <SearchResults 
-                results={searchResults} 
-                searchTime={searchTime} 
-                query={searchQuery}
-                activeSource={activeSource}
-              />
+              {/* Search Results */}
+              {searchQuery ? (
+                <div className="mt-6">
+                  <SearchResults 
+                    results={searchResults} 
+                    searchTime={searchTime} 
+                    query={searchQuery}
+                    activeSource={activeSource}
+                  />
+                </div>
+              ) : (
+                <>
+                  {/* Connected Accounts */}
+                  <div className="mt-8">
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Connected Accounts</h2>
+                      <button
+                        onClick={handleSyncAll}
+                        disabled={isSyncing || connectedCount === 0}
+                        className={cn(
+                          "flex items-center gap-1.5 px-2 py-1 text-xs text-text-tertiary hover:text-white hover:bg-bg-hover rounded transition-colors",
+                          (isSyncing || connectedCount === 0) && "opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        <span className={isSyncing ? "animate-spin" : ""}>{Icons.sync}</span>
+                        {isSyncing ? "Syncing..." : "Sync all"}
+                      </button>
+                    </div>
+
+                    <div className="border border-border rounded-lg divide-y divide-border">
+                      {SOURCES.map((source) => (
+                        <AccountRow
+                          key={source.id}
+                          source={source}
+                          account={status?.accounts?.[source.id]}
+                          onConnect={() => handleConnect(source.id)}
+                          onSync={() => handleSyncSource(source.id)}
+                          onDisconnect={() => handleDisconnect(source.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="mt-8 grid grid-cols-3 gap-4">
+                    <div className="px-4 py-3 bg-bg-secondary rounded-lg border border-border">
+                      <div className="text-lg font-medium text-white tabular-nums">{connectedCount}</div>
+                      <div className="text-xxs text-text-tertiary">Connected</div>
+                    </div>
+                    <div className="px-4 py-3 bg-bg-secondary rounded-lg border border-border">
+                      <div className="text-lg font-medium text-white tabular-nums">{formatNumber(status?.total_documents ?? 0)}</div>
+                      <div className="text-xxs text-text-tertiary">Documents</div>
+                    </div>
+                    <div className="px-4 py-3 bg-bg-secondary rounded-lg border border-border">
+                      <div className="text-lg font-medium text-white tabular-nums">{formatNumber(status?.total_chunks ?? 0)}</div>
+                      <div className="text-xxs text-text-tertiary">Chunks</div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-          ) : (
-            <>
-              {/* Connected Accounts */}
-              <div className="mt-8">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Connected Accounts</h2>
-                  <button
-                    onClick={handleSyncAll}
-                    disabled={isSyncing || connectedCount === 0}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2 py-1 text-xs text-text-tertiary hover:text-white hover:bg-bg-hover rounded transition-colors",
-                      (isSyncing || connectedCount === 0) && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    <span className={isSyncing ? "animate-spin" : ""}>{Icons.sync}</span>
-                    {isSyncing ? "Syncing..." : "Sync all"}
-                  </button>
-                </div>
-
-                <div className="border border-border rounded-lg divide-y divide-border">
-                  {SOURCES.map((source) => (
-                    <AccountRow
-                      key={source.id}
-                      source={source}
-                      account={status?.accounts?.[source.id]}
-                      onConnect={() => handleConnect(source.id)}
-                      onSync={() => handleSyncSource(source.id)}
-                      onDisconnect={() => handleDisconnect(source.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div className="mt-8 grid grid-cols-3 gap-4">
-                <div className="px-4 py-3 bg-bg-secondary rounded-lg border border-border">
-                  <div className="text-lg font-medium text-white tabular-nums">{connectedCount}</div>
-                  <div className="text-xxs text-text-tertiary">Connected</div>
-                </div>
-                <div className="px-4 py-3 bg-bg-secondary rounded-lg border border-border">
-                  <div className="text-lg font-medium text-white tabular-nums">{formatNumber(status?.total_documents ?? 0)}</div>
-                  <div className="text-xxs text-text-tertiary">Documents</div>
-                </div>
-                <div className="px-4 py-3 bg-bg-secondary rounded-lg border border-border">
-                  <div className="text-lg font-medium text-white tabular-nums">{formatNumber(status?.total_chunks ?? 0)}</div>
-                  <div className="text-xxs text-text-tertiary">Chunks</div>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+          </>
+        )}
       </main>
     </div>
   );
