@@ -233,3 +233,14 @@ async def get_source_sync_status(source: Source) -> SyncStatus:
         document_count=state.document_count,
         error=state.error_message,
     )
+
+
+@router.get("/scheduler")
+async def get_scheduler_status() -> dict:
+    """
+    Get background sync scheduler status.
+    """
+    from oslash.services.scheduler import get_scheduler
+
+    scheduler = get_scheduler()
+    return scheduler.get_status()

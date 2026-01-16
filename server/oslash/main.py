@@ -68,13 +68,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     stats = vector_store.get_stats()
     logger.info("ChromaDB initialized", total_chunks=stats.total_chunks)
 
-    # TODO: Start background sync scheduler
+    # Start background sync scheduler
+    from oslash.services.scheduler import start_scheduler, stop_scheduler
+    start_scheduler()
+    logger.info("Sync scheduler started")
 
     yield
 
     # Shutdown
     logger.info("Shutting down OSlash Local server")
-    # TODO: Stop background tasks
+    stop_scheduler()
+    logger.info("Sync scheduler stopped")
 
 
 # =============================================================================

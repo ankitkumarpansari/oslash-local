@@ -162,6 +162,22 @@ async def get_all_sync_states(db: AsyncSession) -> Sequence[SyncState]:
     return result.scalars().all()
 
 
+async def delete_sync_state(db: AsyncSession, source: str) -> bool:
+    """Delete sync state for a source."""
+    result = await db.execute(
+        delete(SyncState).where(SyncState.source == source)
+    )
+    return result.rowcount > 0
+
+
+async def delete_documents_by_source(db: AsyncSession, source: str) -> int:
+    """Delete all documents for a source."""
+    result = await db.execute(
+        delete(Document).where(Document.source == source)
+    )
+    return result.rowcount
+
+
 # =============================================================================
 # ConnectedAccount CRUD
 # =============================================================================
@@ -225,6 +241,57 @@ async def delete_connected_account(db: AsyncSession, source: str) -> bool:
         delete(ConnectedAccount).where(ConnectedAccount.source == source)
     )
     return result.rowcount > 0
+
+
+async def upsert_connected_account(
+    db: AsyncSession,
+    *,
+    source: str,
+    email: Optional[str] = None,
+    token_encrypted: Optional[str] = None,
+    refresh_token_encrypted: Optional[str] = None,
+    expires_at: Optional[datetime] = None,
+) -> ConnectedAccount:
+    """Create or update a connected account (alias for create_connected_account)."""
+    return await create_connected_account(
+        db,
+        source=source,
+        email=email,
+        token_encrypted=token_encrypted,
+        refresh_token_encrypted=refresh_token_encrypted,
+        expires_at=expires_at,
+    )
+
+
+async def update_connected_account(
+    db: AsyncSession,
+    source: str,
+    *,
+    email: Optional[str] = None,
+    token_encrypted: Optional[str] = None,
+    refresh_token_encrypted: Optional[str] = None,
+    expires_at: Optional[datetime] = None,
+) -> Optional[ConnectedAccount]:
+    """Update an existing connected account."""
+    result = await db.execute(
+        select(ConnectedAccount).where(ConnectedAccount.source == source)
+    )
+    account = result.scalar_one_or_none()
+
+    if not account:
+        return None
+
+    if email is not None:
+        account.email = email
+    if token_encrypted is not None:
+        account.token_encrypted = token_encrypted
+    if refresh_token_encrypted is not None:
+        account.refresh_token_encrypted = refresh_token_encrypted
+    if expires_at is not None:
+        account.expires_at = expires_at
+
+    await db.flush()
+    return account
 
 
 # =============================================================================
