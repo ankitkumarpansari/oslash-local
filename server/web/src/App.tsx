@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "preact/hooks";
 import { api } from "./lib/api";
 import { cn, formatRelativeTime, formatNumber, debounce } from "./lib/utils";
+import { parseQuery, getSourceDisplayName } from "./lib/queryParser";
 import type { ServerStatus, Source, SearchResult, SearchResponse } from "./lib/types";
 import { SOURCES } from "./lib/types";
 
@@ -114,16 +115,20 @@ function Sidebar({
 function SearchBar({
   onSearch,
   isSearching,
+  activeSource,
 }: {
-  onSearch: (query: string) => void;
+  onSearch: (query: string, sources?: string[]) => void;
   isSearching: boolean;
+  activeSource: string | null;
 }) {
   const [query, setQuery] = useState("");
 
   const debouncedSearch = useCallback(
     debounce((q: string) => {
-      if (q.trim().length >= 2) {
-        onSearch(q);
+      const parsed = parseQuery(q);
+      if (parsed.query.length >= 2) {
+        const sources = parsed.source ? [parsed.source] : undefined;
+        onSearch(parsed.query, sources);
       }
     }, 300),
     [onSearch]
@@ -138,36 +143,69 @@ function SearchBar({
   const handleSubmit = (e: Event) => {
     e.preventDefault();
     if (query.trim()) {
-      onSearch(query);
+      const parsed = parseQuery(query);
+      const sources = parsed.source ? [parsed.source] : undefined;
+      onSearch(parsed.query, sources);
     }
   };
 
+  // Source icons for the badge
+  const sourceIcons: Record<string, string> = {
+    gmail: "/icons/gmail.png",
+    gdrive: "/icons/gdrive.png",
+    hubspot: "/icons/hubspot.svg",
+    slack: "/icons/slack.svg",
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="relative">
-      <div className="relative">
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary">
-          {isSearching ? (
-            <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="28" strokeDashoffset="7" strokeLinecap="round"/>
-            </svg>
-          ) : (
-            Icons.search
-          )}
+    <div>
+      <form onSubmit={handleSubmit} className="relative">
+        <div className="relative">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary">
+            {isSearching ? (
+              <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="28" strokeDashoffset="7" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              Icons.search
+            )}
+          </div>
+          <input
+            type="text"
+            value={query}
+            onInput={handleInput}
+            placeholder="o/gmail/meetings or o/drive/report..."
+            className="w-full h-9 pl-8 pr-28 text-sm bg-bg-tertiary border border-border rounded-md text-white placeholder-text-tertiary focus:outline-none focus:border-text-tertiary"
+          />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            {/* Show active source filter badge */}
+            {activeSource && (
+              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-bg-hover rounded text-xxs text-text-secondary">
+                <img 
+                  src={sourceIcons[activeSource]} 
+                  alt={activeSource} 
+                  className="w-3 h-3"
+                />
+                <span>{getSourceDisplayName(activeSource)}</span>
+              </div>
+            )}
+            <kbd className="px-1.5 py-0.5 text-xxs text-text-tertiary bg-bg-secondary rounded border border-border font-mono">
+              ⌘K
+            </kbd>
+          </div>
         </div>
-        <input
-          type="text"
-          value={query}
-          onInput={handleInput}
-          placeholder="Search files, emails, messages..."
-          className="w-full h-9 pl-8 pr-16 text-sm bg-bg-tertiary border border-border rounded-md text-white placeholder-text-tertiary focus:outline-none focus:border-text-tertiary"
-        />
-        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-          <kbd className="px-1.5 py-0.5 text-xxs text-text-tertiary bg-bg-secondary rounded border border-border font-mono">
-            ⌘K
-          </kbd>
-        </div>
-      </div>
-    </form>
+      </form>
+      
+      {/* Hint text */}
+      <p className="mt-2 text-xxs text-text-tertiary">
+        Tip: Use{" "}
+        <code className="px-1 py-0.5 bg-bg-tertiary rounded">o/gmail/</code>{" "}
+        <code className="px-1 py-0.5 bg-bg-tertiary rounded">o/drive/</code>{" "}
+        <code className="px-1 py-0.5 bg-bg-tertiary rounded">o/hubspot/</code>{" "}
+        <code className="px-1 py-0.5 bg-bg-tertiary rounded">o/slack/</code>{" "}
+        to filter by source
+      </p>
+    </div>
   );
 }
 
@@ -179,15 +217,20 @@ function SearchResults({
   results,
   searchTime,
   query,
+  activeSource,
 }: {
   results: SearchResult[];
   searchTime: number;
   query: string;
+  activeSource: string | null;
 }) {
   if (results.length === 0) {
     return (
       <div className="py-12 text-center">
-        <p className="text-sm text-text-tertiary">No results found for "{query}"</p>
+        <p className="text-sm text-text-tertiary">
+          No results found for "{query}"
+          {activeSource && ` in ${getSourceDisplayName(activeSource)}`}
+        </p>
       </div>
     );
   }
@@ -202,7 +245,9 @@ function SearchResults({
   return (
     <div className="space-y-1">
       <p className="text-xxs text-text-tertiary mb-3">
-        {results.length} results · {searchTime}ms
+        {results.length} results
+        {activeSource && ` in ${getSourceDisplayName(activeSource)}`}
+        {" · "}{searchTime.toFixed(2)}ms
       </p>
       {results.map((result) => (
         <a
@@ -405,6 +450,7 @@ export function App() {
   const [searchTime, setSearchTime] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [activeSource, setActiveSource] = useState<string | null>(null);
 
   // Fetch server status
   const fetchStatus = useCallback(async () => {
@@ -427,12 +473,13 @@ export function App() {
   }, [fetchStatus]);
 
   // Handle search
-  const handleSearch = useCallback(async (query: string) => {
+  const handleSearch = useCallback(async (query: string, sources?: string[]) => {
     setSearchQuery(query);
+    setActiveSource(sources?.[0] ?? null);
     setIsSearching(true);
     
     try {
-      const response: SearchResponse = await api.search(query);
+      const response: SearchResponse = await api.search(query, { sources });
       setSearchResults(response.results);
       setSearchTime(response.search_time_ms);
     } catch (error) {
@@ -529,7 +576,7 @@ export function App() {
 
         <div className="max-w-2xl mx-auto px-6 py-6">
           {/* Search */}
-          <SearchBar onSearch={handleSearch} isSearching={isSearching} />
+          <SearchBar onSearch={handleSearch} isSearching={isSearching} activeSource={activeSource} />
 
           {/* Search Results */}
           {searchQuery ? (
@@ -538,6 +585,7 @@ export function App() {
                 results={searchResults} 
                 searchTime={searchTime} 
                 query={searchQuery}
+                activeSource={activeSource}
               />
             </div>
           ) : (
