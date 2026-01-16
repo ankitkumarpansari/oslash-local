@@ -3,16 +3,23 @@ export default {
   content: ["./src/**/*.{ts,tsx,html}"],
   theme: {
     extend: {
-      // Fixed z-index scale (UI Skills constraint)
       zIndex: {
-        base: "0",
-        dropdown: "10",
-        modal: "20",
-        toast: "30",
-        overlay: "9999",
+        60: "60",
+        70: "70",
+        80: "80",
+        90: "90",
+        100: "100",
+      },
+      animation: {
+        shimmer: "shimmer 1.5s infinite",
+      },
+      keyframes: {
+        shimmer: {
+          "0%": { backgroundPosition: "200% 0" },
+          "100%": { backgroundPosition: "-200% 0" },
+        },
       },
     },
   },
   plugins: [],
 };
-

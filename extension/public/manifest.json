@@ -3,7 +3,7 @@
   "name": "OSlash Local",
   "version": "0.1.0",
   "description": "Search your files across Google Drive, Gmail, Slack, and HubSpot with o/ trigger",
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "storage", "alarms"],
   "host_permissions": ["http://localhost:8000/*"],
   "content_scripts": [
     {
@@ -32,4 +32,3 @@
     "128": "icons/icon-128.png"
   }
 }
-
