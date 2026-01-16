@@ -29,8 +29,12 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="Logging level")
 
     # ==========================================================================
-    # OpenAI Configuration
+    # LLM Configuration (supports OpenAI or Ollama)
     # ==========================================================================
+    llm_provider: str = Field(
+        default="ollama",
+        description="LLM provider: 'openai' or 'ollama'",
+    )
     openai_api_key: Optional[str] = Field(
         default=None,
         description="OpenAI API key",
@@ -45,8 +49,8 @@ class Settings(BaseSettings):
         description="Embedding vector dimensions",
     )
     chat_model: str = Field(
-        default="gpt-4o-mini",
-        description="OpenAI chat model for Q&A",
+        default="qwen2.5:7b",
+        description="Chat model for Q&A (e.g., 'gpt-4o-mini' for OpenAI, 'qwen2.5:7b' for Ollama)",
     )
     chat_temperature: float = Field(
         default=0.7,
@@ -59,6 +63,14 @@ class Settings(BaseSettings):
         ge=1,
         le=128000,
         description="Maximum tokens for chat response",
+    )
+    
+    # ==========================================================================
+    # Ollama Configuration
+    # ==========================================================================
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Ollama server base URL",
     )
 
     # ==========================================================================
@@ -201,6 +213,10 @@ class Settings(BaseSettings):
     def has_openai_key(self) -> bool:
         """Check if OpenAI API key is configured."""
         return bool(self.openai_api_key)
+    
+    def use_ollama(self) -> bool:
+        """Check if using Ollama for chat."""
+        return self.llm_provider.lower() == "ollama"
 
     def has_google_oauth(self) -> bool:
         """Check if Google OAuth is configured."""

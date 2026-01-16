@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from typing import AsyncGenerator, Optional
 
+import httpx
 import structlog
 from openai import AsyncOpenAI
 
@@ -94,17 +95,26 @@ class ChatSession:
 
 
 class ChatEngine:
-    """RAG-based Q&A chat engine using OpenAI."""
+    """RAG-based Q&A chat engine supporting OpenAI and Ollama."""
 
     def __init__(self):
         """Initialize the chat engine."""
         self.settings = get_settings()
-
-        if not self.settings.openai_api_key:
-            logger.warning("OpenAI API key not configured")
-            self.client = None
-        else:
+        self.use_ollama = self.settings.use_ollama()
+        
+        if self.use_ollama:
+            # Use Ollama's OpenAI-compatible API
+            self.client = AsyncOpenAI(
+                base_url=f"{self.settings.ollama_base_url}/v1",
+                api_key="ollama",  # Ollama doesn't need a real key
+            )
+            logger.info("ChatEngine using Ollama", base_url=self.settings.ollama_base_url)
+        elif self.settings.openai_api_key:
             self.client = AsyncOpenAI(api_key=self.settings.openai_api_key)
+            logger.info("ChatEngine using OpenAI")
+        else:
+            logger.warning("No LLM configured - chat will not work")
+            self.client = None
 
         self.model = self.settings.chat_model
         self.max_tokens = self.settings.max_tokens
@@ -116,7 +126,8 @@ class ChatEngine:
         logger.info(
             "ChatEngine initialized",
             model=self.model,
-            has_api_key=bool(self.client),
+            provider="ollama" if self.use_ollama else "openai",
+            has_client=bool(self.client),
         )
 
     def _format_context(self, chunks: list[VectorSearchResult]) -> str:
@@ -187,7 +198,10 @@ class ChatEngine:
             Tokens of the response as they're generated
         """
         if not self.client:
-            yield "Error: OpenAI API key not configured. Please add OPENAI_API_KEY to your .env file."
+            if self.use_ollama:
+                yield "Error: Ollama is not running. Please start Ollama with 'ollama serve' and pull a model like 'ollama pull qwen2.5:7b'."
+            else:
+                yield "Error: OpenAI API key not configured. Please add OPENAI_API_KEY to your .env file or use Ollama by setting LLM_PROVIDER=ollama."
             return
 
         # Build the messages
