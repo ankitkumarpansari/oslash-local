@@ -2,13 +2,15 @@
 
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 import structlog
 import uvicorn
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from oslash import __version__
 from oslash.api import auth, chat, search, sync, vectors
@@ -360,6 +362,90 @@ app.include_router(chat.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(sync.router, prefix="/api/v1")
 app.include_router(vectors.router, prefix="/api/v1")
+
+
+# =============================================================================
+# Static Web UI
+# =============================================================================
+
+# Path to the web UI build directory (relative to this file)
+WEB_UI_DIR = Path(__file__).parent.parent / "web" / "dist"
+
+
+def setup_static_files():
+    """Mount static files if web UI is built."""
+    if WEB_UI_DIR.exists() and (WEB_UI_DIR / "index.html").exists():
+        # Mount static assets (JS, CSS, images)
+        app.mount("/assets", StaticFiles(directory=WEB_UI_DIR / "assets"), name="assets")
+        logger.info("Web UI mounted", path=str(WEB_UI_DIR))
+        return True
+    else:
+        logger.warning(
+            "Web UI not found. Run 'cd web && npm install && npm run build' to enable the dashboard.",
+            expected_path=str(WEB_UI_DIR),
+        )
+        return False
+
+
+# Check if web UI exists
+_web_ui_available = setup_static_files()
+
+
+@app.get("/", tags=["Web UI"])
+async def serve_web_ui():
+    """
+    Serve the web dashboard.
+    
+    If the web UI is built, serves the single-page application.
+    Otherwise, redirects to the API docs.
+    """
+    if _web_ui_available:
+        return FileResponse(WEB_UI_DIR / "index.html")
+    else:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "OSlash Local API Server",
+                "version": __version__,
+                "docs": "/docs",
+                "web_ui": "Not built. Run 'cd web && npm install && npm run build' to enable.",
+            },
+        )
+
+
+@app.get("/favicon.svg", tags=["Web UI"])
+async def serve_favicon():
+    """Serve the favicon."""
+    favicon_path = WEB_UI_DIR / "favicon.svg"
+    if favicon_path.exists():
+        return FileResponse(favicon_path, media_type="image/svg+xml")
+    return JSONResponse(status_code=404, content={"detail": "Not found"})
+
+
+# Catch-all route for SPA routing (must be last)
+@app.get("/{full_path:path}", tags=["Web UI"])
+async def serve_spa_routes(full_path: str):
+    """
+    Catch-all route for SPA client-side routing.
+    
+    Returns index.html for any non-API routes to support client-side routing.
+    """
+    # Don't handle API routes, docs, or static files
+    if (
+        full_path.startswith("api/")
+        or full_path.startswith("docs")
+        or full_path.startswith("redoc")
+        or full_path.startswith("openapi")
+        or full_path.startswith("health")
+        or full_path.startswith("ws/")
+        or full_path.startswith("assets/")
+    ):
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+    
+    if _web_ui_available:
+        return FileResponse(WEB_UI_DIR / "index.html")
+    
+    return JSONResponse(status_code=404, content={"detail": "Not found"})
 
 
 # =============================================================================

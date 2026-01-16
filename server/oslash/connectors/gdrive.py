@@ -74,14 +74,17 @@ class GoogleDriveConnector(BaseConnector):
         Authenticate with Google Drive using OAuth tokens.
 
         Args:
-            credentials: Dict with 'token', 'refresh_token', 'token_uri', etc.
+            credentials: Dict with 'access_token' or 'token', 'refresh_token', 'token_uri', etc.
 
         Returns:
             True if authentication successful
         """
         try:
+            # Support both 'access_token' (from OAuth storage) and 'token' (legacy)
+            access_token = credentials.get("access_token") or credentials.get("token")
+            
             self.credentials = Credentials(
-                token=credentials.get("token"),
+                token=access_token,
                 refresh_token=credentials.get("refresh_token"),
                 token_uri=credentials.get("token_uri", "https://oauth2.googleapis.com/token"),
                 client_id=self.settings.google_client_id,

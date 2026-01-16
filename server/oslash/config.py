@@ -170,6 +170,10 @@ class Settings(BaseSettings):
         default=None,
         description="HubSpot OAuth client secret",
     )
+    hubspot_api_key: Optional[str] = Field(
+        default=None,
+        description="HubSpot Private App Access Token (alternative to OAuth)",
+    )
 
     # ==========================================================================
     # Validators
@@ -210,6 +214,14 @@ class Settings(BaseSettings):
         """Check if HubSpot OAuth is configured."""
         return bool(self.hubspot_client_id and self.hubspot_client_secret)
 
+    def has_hubspot_api_key(self) -> bool:
+        """Check if HubSpot API key is configured."""
+        return bool(self.hubspot_api_key)
+
+    def has_hubspot(self) -> bool:
+        """Check if HubSpot is configured (OAuth or API key)."""
+        return self.has_hubspot_oauth() or self.has_hubspot_api_key()
+
     def get_configured_sources(self) -> list[str]:
         """Get list of configured sources."""
         sources = []
@@ -217,7 +229,7 @@ class Settings(BaseSettings):
             sources.extend(["gdrive", "gmail"])
         if self.has_slack_oauth():
             sources.append("slack")
-        if self.has_hubspot_oauth():
+        if self.has_hubspot():
             sources.append("hubspot")
         return sources
 

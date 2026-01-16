@@ -57,16 +57,13 @@ async def _run_connector(connector, source: str, full: bool = False) -> SyncResu
             )
 
         # TODO: Decrypt token
-        # For now, assume token is stored as JSON
+        # For now, assume token is stored as JSON or raw string (for API keys)
         import json
         try:
             credentials = json.loads(account.token_encrypted)
-        except:
-            return SyncResult(
-                success=False,
-                source=Source(source),
-                errors=["Invalid credentials"],
-            )
+        except json.JSONDecodeError:
+            # Token is a raw string (e.g., HubSpot API key)
+            credentials = {"access_token": account.token_encrypted}
 
     # Authenticate
     if not await connector.authenticate(credentials):

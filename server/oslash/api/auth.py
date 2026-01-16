@@ -103,6 +103,60 @@ def get_client_credentials(provider: Source) -> tuple[Optional[str], Optional[st
     return client_id, client_secret
 
 
+@router.post("/hubspot/connect-api-key")
+async def connect_hubspot_api_key() -> dict:
+    """
+    Connect HubSpot using the API key from settings.
+    
+    This is an alternative to OAuth for private apps.
+    """
+    settings = get_settings()
+    
+    if not settings.hubspot_api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="HubSpot API key not configured. Set OSLASH_HUBSPOT_API_KEY in .env",
+        )
+    
+    try:
+        # Test the API key by making a simple request
+        from oslash.connectors.hubspot import HubSpotConnector
+        
+        connector = HubSpotConnector()
+        success = await connector.authenticate_with_api_key()
+        
+        if not success:
+            raise HTTPException(status_code=400, detail="Invalid HubSpot API key")
+        
+        # Store as a connected account
+        async with get_db_context() as db:
+            await crud.upsert_connected_account(
+                db,
+                source="hubspot",
+                email="api-key@hubspot.local",
+                token_encrypted=settings.hubspot_api_key,
+                refresh_token_encrypted=None,
+                expires_at=None,  # API keys don't expire
+            )
+            
+            # Initialize sync state
+            await crud.get_or_create_sync_state(db, "hubspot")
+        
+        logger.info("HubSpot connected via API key")
+        
+        return {
+            "provider": "hubspot",
+            "status": "connected",
+            "message": "HubSpot connected using API key",
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("HubSpot API key connection failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Connection failed: {str(e)}")
+
+
 @router.get("/{provider}/url", response_model=AuthUrlResponse)
 async def get_auth_url(provider: Source) -> AuthUrlResponse:
     """

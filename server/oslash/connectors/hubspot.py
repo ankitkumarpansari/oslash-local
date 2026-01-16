@@ -1,10 +1,13 @@
 """HubSpot connector for syncing CRM data."""
 
 import asyncio
+import os
+import ssl
 import time
 from datetime import datetime
 from typing import Optional
 
+import certifi
 import structlog
 from hubspot import HubSpot
 from hubspot.crm.contacts import ApiException as ContactsApiException
@@ -12,6 +15,10 @@ from hubspot.crm.companies import ApiException as CompaniesApiException
 from hubspot.crm.deals import ApiException as DealsApiException
 
 from oslash.config import get_settings
+
+# Fix SSL certificate verification on macOS
+os.environ.setdefault('SSL_CERT_FILE', certifi.where())
+os.environ.setdefault('REQUESTS_CA_BUNDLE', certifi.where())
 from oslash.connectors.base import BaseConnector, FileInfo, SyncResult
 from oslash.db import get_db_context, crud
 from oslash.db.models import Document
@@ -64,39 +71,45 @@ class HubSpotConnector(BaseConnector):
         self.settings = get_settings()
         self.portal_id: Optional[str] = None
         self.last_sync_time: Optional[datetime] = None
+        self._using_api_key = False
 
     async def authenticate(self, credentials: dict) -> bool:
         """
-        Authenticate with HubSpot using OAuth token.
+        Authenticate with HubSpot using OAuth token or API key.
 
         Args:
-            credentials: Dict with 'access_token' or 'token'
+            credentials: Dict with 'access_token', 'token', or 'api_key'
 
         Returns:
             True if authentication successful
         """
         try:
-            token = credentials.get("access_token") or credentials.get("token")
+            # Try to get token from credentials or fall back to API key from settings
+            token = (
+                credentials.get("access_token") 
+                or credentials.get("token") 
+                or credentials.get("api_key")
+                or self.settings.hubspot_api_key
+            )
+            
             if not token:
-                logger.error("No HubSpot token provided")
+                logger.error("No HubSpot token or API key provided")
                 return False
 
+            self._using_api_key = token == self.settings.hubspot_api_key
             self.client = HubSpot(access_token=token)
 
-            # Test the connection by getting account info
-            account_info = self.client.settings.users.api.get_page()
-
-            # Get portal ID from a simple API call
+            # Test the connection by getting contacts
             try:
-                # Try to get portal ID from contacts API
                 contacts = self.client.crm.contacts.basic_api.get_page(limit=1)
-                # Portal ID is in the URLs returned
-                self.portal_id = "unknown"  # Will be extracted from URLs
-            except:
-                self.portal_id = "unknown"
+                self.portal_id = "connected"
+                logger.info("HubSpot connection verified", using_api_key=self._using_api_key)
+            except Exception as e:
+                logger.error("HubSpot connection test failed", error=str(e))
+                return False
 
             self.is_authenticated = True
-            logger.info("HubSpot authenticated")
+            logger.info("HubSpot authenticated", using_api_key=self._using_api_key)
 
             return True
 
@@ -104,6 +117,19 @@ class HubSpotConnector(BaseConnector):
             logger.error("HubSpot authentication failed", error=str(e))
             self.is_authenticated = False
             return False
+    
+    async def authenticate_with_api_key(self) -> bool:
+        """
+        Authenticate using the API key from settings.
+        
+        Returns:
+            True if authentication successful
+        """
+        if not self.settings.hubspot_api_key:
+            logger.error("No HubSpot API key configured")
+            return False
+        
+        return await self.authenticate({"api_key": self.settings.hubspot_api_key})
 
     async def list_files(
         self,
