@@ -1,0 +1,146 @@
+/* OSlash CLI Styles */
+
+Screen {
+    layout: vertical;
+    background: $surface;
+}
+
+/* Header */
+Header {
+    dock: top;
+    height: 1;
+    background: $primary;
+}
+
+/* Footer */
+Footer {
+    dock: bottom;
+    height: 1;
+}
+
+/* Main container */
+#main {
+    height: 1fr;
+    layout: vertical;
+}
+
+/* Search section */
+#search-section {
+    height: auto;
+    padding: 1 2;
+}
+
+#search-bar {
+    width: 100%;
+    height: 3;
+    border: tall $primary;
+}
+
+#search-bar:focus {
+    border: tall $accent;
+}
+
+/* Results section */
+#results-section {
+    height: 1fr;
+    padding: 0 2;
+}
+
+#results-header {
+    height: 1;
+    padding: 0 1;
+    color: $text-muted;
+}
+
+#results-list {
+    height: 1fr;
+    border: round $primary;
+    scrollbar-gutter: stable;
+}
+
+/* Result items */
+ResultItem {
+    height: auto;
+    padding: 1 2;
+}
+
+ResultItem:hover {
+    background: $surface-lighten-1;
+}
+
+ResultItem.-selected {
+    background: $primary-lighten-2;
+}
+
+.result-title {
+    height: 1;
+}
+
+.result-meta {
+    height: 1;
+    color: $text-muted;
+}
+
+.result-snippet {
+    height: auto;
+    color: $text;
+    margin-top: 1;
+}
+
+/* Chat panel */
+#chat-panel {
+    height: 1fr;
+    layout: vertical;
+    padding: 1 2;
+}
+
+#chat-context {
+    height: 1;
+    padding: 0 1;
+    background: $primary-darken-2;
+}
+
+#chat-messages {
+    height: 1fr;
+    border: round $primary;
+    padding: 1;
+    scrollbar-gutter: stable;
+}
+
+ChatMessage {
+    height: auto;
+    padding: 1 0;
+    margin-bottom: 1;
+}
+
+#chat-input {
+    height: 3;
+    margin-top: 1;
+    border: tall $accent;
+}
+
+#chat-input:focus {
+    border: tall $success;
+}
+
+/* Status bar */
+#status-bar {
+    dock: bottom;
+    height: 1;
+    padding: 0 2;
+    background: $surface-darken-1;
+}
+
+/* Loading indicator */
+.loading {
+    text-style: italic;
+    color: $warning;
+}
+
+/* Empty state */
+.empty-state {
+    height: 100%;
+    content-align: center middle;
+    color: $text-muted;
+}
+
