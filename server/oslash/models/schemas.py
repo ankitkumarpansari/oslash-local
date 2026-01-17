@@ -14,6 +14,7 @@ class Source(str, Enum):
     GMAIL = "gmail"
     SLACK = "slack"
     HUBSPOT = "hubspot"
+    GPEOPLE = "gpeople"
 
 
 # =============================================================================

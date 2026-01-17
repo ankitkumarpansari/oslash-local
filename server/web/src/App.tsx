@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "preact/hooks";
 import { api } from "./lib/api";
-import { cn, formatRelativeTime, formatNumber, debounce } from "./lib/utils";
+import { cn, formatNumber, debounce } from "./lib/utils";
 import { parseQuery, getSourceDisplayName } from "./lib/queryParser";
 import type { ServerStatus, Source, SearchResult, SearchResponse } from "./lib/types";
 import { SOURCES } from "./lib/types";
-
-// View types
-type View = "search" | "chat";
+import { ResultsGrid } from "./components/ResultCards";
 
 // =============================================================================
 // Icons
@@ -14,798 +12,118 @@ type View = "search" | "chat";
 
 const Icons = {
   search: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <path d="M7.333 12.667A5.333 5.333 0 1 0 7.333 2a5.333 5.333 0 0 0 0 10.667ZM14 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  chat: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <path d="M14 10.667a1.333 1.333 0 0 1-1.333 1.333H4l-2.667 2.667V3.333A1.333 1.333 0 0 1 2.667 2h10A1.333 1.333 0 0 1 14 3.333v7.334Z" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M7.333 12.667A5.333 5.333 0 1 0 7.333 2a5.333 5.333 0 0 0 0 10.667ZM14 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
   send: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <path d="M14.667 1.333 7.333 8.667M14.667 1.333l-4.667 13.334-2.667-6L1.333 6l13.334-4.667Z" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M14.667 1.333 7.333 8.667M14.667 1.333l-4.667 13.334-2.667-6L1.333 6l13.334-4.667Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
   sync: (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-      <path d="M1.333 2.667v4h4M14.667 13.333v-4h-4" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M13.66 6A6 6 0 0 0 3.34 3.34L1.333 6.667M2.34 10a6 6 0 0 0 10.32 2.66l2.007-3.327" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M1.333 2.667v4h4M14.667 13.333v-4h-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M13.66 6A6 6 0 0 0 3.34 3.34L1.333 6.667M2.34 10a6 6 0 0 0 10.32 2.66l2.007-3.327" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
   check: (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-      <path d="M13.333 4 6 11.333 2.667 8" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  disconnect: (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-      <path d="M6 10l4-4M8.5 3.5L10 2l4 4-1.5 1.5M7.5 12.5L6 14l-4-4 1.5-1.5" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M13.333 4 6 11.333 2.667 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
   external: (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-      <path d="M12 8.667v4A1.333 1.333 0 0 1 10.667 14H3.333A1.333 1.333 0 0 1 2 12.667V5.333A1.333 1.333 0 0 1 3.333 4h4M10 2h4v4M6.667 9.333 14 2" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 8.667v4A1.333 1.333 0 0 1 10.667 14H3.333A1.333 1.333 0 0 1 2 12.667V5.333A1.333 1.333 0 0 1 3.333 4h4M10 2h4v4M6.667 9.333 14 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
   sparkles: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <path d="M8 1.333v2M8 12.667v2M3.287 3.287l1.42 1.42M11.293 11.293l1.42 1.42M1.333 8h2M12.667 8h2M3.287 12.713l1.42-1.42M11.293 4.707l1.42-1.42" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M8 1v2.5M8 12.5V15M3.5 8H1M15 8h-2.5M4.4 4.4l1.77 1.77M9.83 9.83l1.77 1.77M4.4 11.6l1.77-1.77M9.83 6.17l1.77-1.77" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   ),
-  user: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <path d="M13.333 14v-1.333A2.667 2.667 0 0 0 10.667 10H5.333a2.667 2.667 0 0 0-2.666 2.667V14M8 7.333A2.667 2.667 0 1 0 8 2a2.667 2.667 0 0 0 0 5.333Z" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+  sun: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M8 1.333V3M8 13v1.667M1.333 8H3M13 8h1.667M3.286 3.286l1.178 1.178M11.536 11.536l1.178 1.178M3.286 12.714l1.178-1.178M11.536 4.464l1.178-1.178" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   ),
-  newChat: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <path d="M8 3.333v9.334M3.333 8h9.334" stroke="currentColor" strokeWidth="1.33" strokeLinecap="round" strokeLinejoin="round"/>
+  moon: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M14 8.667A6 6 0 1 1 7.333 2 4.667 4.667 0 0 0 14 8.667Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  settings: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M13.6 10a1.2 1.2 0 0 0 .24 1.32l.04.04a1.46 1.46 0 1 1-2.06 2.06l-.04-.04a1.2 1.2 0 0 0-1.32-.24 1.2 1.2 0 0 0-.73 1.1v.12a1.45 1.45 0 1 1-2.9 0v-.06a1.2 1.2 0 0 0-.79-1.1 1.2 1.2 0 0 0-1.32.24l-.04.04a1.46 1.46 0 1 1-2.06-2.06l.04-.04a1.2 1.2 0 0 0 .24-1.32 1.2 1.2 0 0 0-1.1-.73h-.12a1.45 1.45 0 1 1 0-2.9h.06a1.2 1.2 0 0 0 1.1-.79 1.2 1.2 0 0 0-.24-1.32l-.04-.04a1.46 1.46 0 1 1 2.06-2.06l.04.04a1.2 1.2 0 0 0 1.32.24h.06a1.2 1.2 0 0 0 .73-1.1v-.12a1.45 1.45 0 1 1 2.9 0v.06a1.2 1.2 0 0 0 .73 1.1 1.2 1.2 0 0 0 1.32-.24l.04-.04a1.46 1.46 0 1 1 2.06 2.06l-.04.04a1.2 1.2 0 0 0-.24 1.32v.06a1.2 1.2 0 0 0 1.1.73h.12a1.45 1.45 0 1 1 0 2.9h-.06a1.2 1.2 0 0 0-1.1.73Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  close: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  ),
+  chevronDown: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
 };
 
-// =============================================================================
-// Sidebar Component
-// =============================================================================
-
-function Sidebar({ 
-  isOnline, 
-  version,
-  connectedCount,
-  totalDocs,
-  currentView,
-  onViewChange,
-}: { 
-  isOnline: boolean; 
-  version: string;
-  connectedCount: number;
-  totalDocs: number;
-  currentView: View;
-  onViewChange: (view: View) => void;
-}) {
-  return (
-    <aside className="w-52 h-screen border-r border-border bg-bg-secondary flex flex-col fixed left-0 top-0">
-      {/* Logo */}
-      <div className="px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded bg-white flex items-center justify-center text-black text-xxs font-semibold">
-            o/
-          </div>
-          <span className="text-sm font-medium text-white">OSlash Local</span>
-        </div>
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 py-2 px-2">
-        <div className="space-y-0.5">
-          <button 
-            onClick={() => onViewChange("search")}
-            className={cn(
-              "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
-              currentView === "search" 
-                ? "text-white bg-bg-hover" 
-                : "text-text-secondary hover:bg-bg-hover hover:text-white"
-            )}
-          >
-            {Icons.search}
-            <span>Search</span>
-          </button>
-          <button 
-            onClick={() => onViewChange("chat")}
-            className={cn(
-              "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
-              currentView === "chat" 
-                ? "text-white bg-bg-hover" 
-                : "text-text-secondary hover:bg-bg-hover hover:text-white"
-            )}
-          >
-            {Icons.chat}
-            <span>Ask AI</span>
-            <span className="ml-auto px-1.5 py-0.5 text-xxs bg-purple-500/20 text-purple-400 rounded">New</span>
-          </button>
-        </div>
-
-        <div className="mt-6 px-2">
-          <div className="text-xxs font-medium text-text-tertiary uppercase tracking-wider mb-2">Sources</div>
-          <div className="space-y-0.5">
-            {SOURCES.map((source) => (
-              <div key={source.id} className="flex items-center gap-2 px-2 py-1.5 text-sm text-text-secondary rounded-md hover:bg-bg-hover cursor-default">
-                <img src={source.icon} alt={source.name} className="w-4 h-4 object-contain" />
-                <span>{source.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </nav>
-
-      {/* Footer */}
-      <div className="px-4 py-3 border-t border-border">
-        <div className="flex items-center justify-between text-xxs text-text-tertiary">
-          <div className="flex items-center gap-1.5">
-            <span className={cn(
-              "w-1.5 h-1.5 rounded-full",
-              isOnline ? "bg-green-500" : "bg-red-500"
-            )} />
-            <span className="text-text-secondary">{isOnline ? "Online" : "Offline"}</span>
-          </div>
-          <span>v{version}</span>
-        </div>
-        <div className="mt-2 flex items-center justify-between text-xxs text-text-tertiary">
-          <span>{connectedCount} connected</span>
-          <span>{formatNumber(totalDocs)} docs</span>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-// =============================================================================
-// Search Bar Component
-// =============================================================================
-
-function SearchBar({
-  onSearch,
-  isSearching,
-  activeSource,
-}: {
-  onSearch: (query: string, sources?: string[]) => void;
-  isSearching: boolean;
-  activeSource: string | null;
-}) {
-  const [query, setQuery] = useState("");
-
-  const debouncedSearch = useCallback(
-    debounce((q: string) => {
-      const parsed = parseQuery(q);
-      if (parsed.query.length >= 2) {
-        const sources = parsed.source ? [parsed.source] : undefined;
-        onSearch(parsed.query, sources);
-      }
-    }, 300),
-    [onSearch]
-  );
-
-  const handleInput = (e: Event) => {
-    const value = (e.target as HTMLInputElement).value;
-    setQuery(value);
-    debouncedSearch(value);
-  };
-
-  const handleSubmit = (e: Event) => {
-    e.preventDefault();
-    if (query.trim()) {
-      const parsed = parseQuery(query);
-      const sources = parsed.source ? [parsed.source] : undefined;
-      onSearch(parsed.query, sources);
-    }
-  };
-
-  // Source icons for the badge
-  const sourceIcons: Record<string, string> = {
-    gmail: "/icons/gmail.png",
-    gdrive: "/icons/gdrive.png",
-    hubspot: "/icons/hubspot.svg",
-    slack: "/icons/slack.svg",
-  };
-
-  return (
-    <div>
-      <form onSubmit={handleSubmit} className="relative">
-        <div className="relative">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary">
-            {isSearching ? (
-              <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="28" strokeDashoffset="7" strokeLinecap="round"/>
-              </svg>
-            ) : (
-              Icons.search
-            )}
-          </div>
-          <input
-            type="text"
-            value={query}
-            onInput={handleInput}
-            placeholder="o/gmail/meetings or o/drive/report..."
-            className="w-full h-9 pl-8 pr-28 text-sm bg-bg-tertiary border border-border rounded-md text-white placeholder-text-tertiary focus:outline-none focus:border-text-tertiary"
-          />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-            {/* Show active source filter badge */}
-            {activeSource && (
-              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-bg-hover rounded text-xxs text-text-secondary">
-                <img 
-                  src={sourceIcons[activeSource]} 
-                  alt={activeSource} 
-                  className="w-3 h-3"
-                />
-                <span>{getSourceDisplayName(activeSource)}</span>
-              </div>
-            )}
-            <kbd className="px-1.5 py-0.5 text-xxs text-text-tertiary bg-bg-secondary rounded border border-border font-mono">
-              ⌘K
-            </kbd>
-          </div>
-        </div>
-      </form>
-      
-      {/* Hint text */}
-      <p className="mt-2 text-xxs text-text-tertiary">
-        Tip: Use{" "}
-        <code className="px-1 py-0.5 bg-bg-tertiary rounded">o/gmail/</code>{" "}
-        <code className="px-1 py-0.5 bg-bg-tertiary rounded">o/drive/</code>{" "}
-        <code className="px-1 py-0.5 bg-bg-tertiary rounded">o/hubspot/</code>{" "}
-        <code className="px-1 py-0.5 bg-bg-tertiary rounded">o/slack/</code>{" "}
-        to filter by source
-      </p>
-    </div>
-  );
-}
-
-// =============================================================================
-// Search Results Component
-// =============================================================================
-
-function SearchResults({
-  results,
-  searchTime,
-  query,
-  activeSource,
-}: {
-  results: SearchResult[];
-  searchTime: number;
-  query: string;
-  activeSource: string | null;
-}) {
-  if (results.length === 0) {
-    return (
-      <div className="py-12 text-center">
-        <p className="text-sm text-text-tertiary">
-          No results found for "{query}"
-          {activeSource && ` in ${getSourceDisplayName(activeSource)}`}
-        </p>
-      </div>
-    );
-  }
-
-  const sourceIcon: Record<string, string> = {
-    gdrive: "/icons/gdrive.png",
-    gmail: "/icons/gmail.png",
-    slack: "/icons/slack.svg",
-    hubspot: "/icons/hubspot.svg",
-  };
-
-  return (
-    <div className="space-y-1">
-      <p className="text-xxs text-text-tertiary mb-3">
-        {results.length} results
-        {activeSource && ` in ${getSourceDisplayName(activeSource)}`}
-        {" · "}{searchTime.toFixed(2)}ms
-      </p>
-      {results.map((result) => (
-        <a
-          key={result.chunk_id}
-          href={result.url || "#"}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block px-3 py-2.5 rounded-md hover:bg-bg-hover group transition-colors"
-        >
-          <div className="flex items-start gap-2.5">
-            <img 
-              src={sourceIcon[result.source] || "/icons/gdrive.png"} 
-              alt={result.source}
-              className="w-4 h-4 mt-0.5 flex-shrink-0 object-contain"
-            />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium text-white truncate">{result.title}</h3>
-                <span className="opacity-0 group-hover:opacity-100 text-text-tertiary transition-opacity">
-                  {Icons.external}
-                </span>
-              </div>
-              {result.section_title && (
-                <p className="text-xs text-text-secondary truncate mt-0.5">{result.section_title}</p>
-              )}
-              <p className="text-xs text-text-tertiary mt-1 line-clamp-2 leading-relaxed">{result.snippet}</p>
-              <div className="flex items-center gap-2 mt-1.5 text-xxs text-text-tertiary">
-                <span className="capitalize">{result.source}</span>
-                {result.author && (
-                  <>
-                    <span>·</span>
-                    <span>{result.author}</span>
-                  </>
-                )}
-                {result.modified_at && (
-                  <>
-                    <span>·</span>
-                    <span>{formatRelativeTime(result.modified_at)}</span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="text-xxs text-text-tertiary font-mono flex-shrink-0">
-              {Math.round(result.score * 100)}%
-            </div>
-          </div>
-        </a>
-      ))}
-    </div>
-  );
-}
-
-// =============================================================================
-// Account Row Component
-// =============================================================================
-
-function AccountRow({
-  source,
-  account,
-  onConnect,
-  onSync,
-  onDisconnect,
-}: {
-  source: { id: Source; name: string; icon: string; description: string };
-  account?: {
-    connected: boolean;
-    email: string | null;
-    document_count: number;
-    last_sync: string | null;
-    status: string;
-  };
-  onConnect: () => void;
-  onSync: () => void;
-  onDisconnect: () => void;
-}) {
-  const isConnected = account?.connected ?? false;
-  const isSyncing = account?.status === "syncing";
-
-  return (
-    <div className="flex items-center justify-between py-2.5 px-3 rounded-md hover:bg-bg-hover group">
-      <div className="flex items-center gap-3">
-        <img src={source.icon} alt={source.name} className="w-5 h-5 object-contain" />
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-white">{source.name}</span>
-            {isConnected && (
-              <span className="flex items-center gap-1 text-xxs text-green-500">
-                {Icons.check}
-              </span>
-            )}
-          </div>
-          <p className="text-xxs text-text-tertiary">
-            {isConnected && account?.email 
-              ? account.email 
-              : source.description}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        {isConnected ? (
-          <>
-            <span className="text-xxs text-text-tertiary mr-2">
-              {formatNumber(account?.document_count ?? 0)} items
-              {account?.last_sync && ` · ${formatRelativeTime(account.last_sync)}`}
-            </span>
-            <button
-              onClick={onSync}
-              disabled={isSyncing}
-              className={cn(
-                "p-1.5 rounded text-text-tertiary hover:text-white hover:bg-bg-tertiary transition-colors",
-                "opacity-0 group-hover:opacity-100",
-                isSyncing && "opacity-100"
-              )}
-              title="Sync"
-            >
-              <span className={isSyncing ? "animate-spin block" : ""}>{Icons.sync}</span>
-            </button>
-            <button
-              onClick={onDisconnect}
-              className="p-1.5 rounded text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
-              title="Disconnect"
-            >
-              {Icons.disconnect}
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={onConnect}
-            className="px-2.5 py-1 text-xs font-medium text-white hover:bg-bg-tertiary rounded transition-colors"
-          >
-            Connect
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// Chat Message Component
-// =============================================================================
-
-interface ChatMessageData {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  sources?: string[];
-  timestamp: Date;
-}
-
-function ChatMessageBubble({ message }: { message: ChatMessageData }) {
-  const isUser = message.role === "user";
-  
-  return (
-    <div className={cn("flex gap-3", isUser ? "flex-row-reverse" : "flex-row")}>
-      <div className={cn(
-        "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0",
-        isUser ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"
-      )}>
-        {isUser ? Icons.user : Icons.sparkles}
-      </div>
-      <div className={cn(
-        "max-w-[80%] rounded-lg px-3 py-2",
-        isUser ? "bg-blue-500/10 text-white" : "bg-bg-tertiary text-white"
-      )}>
-        <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
-        {message.sources && message.sources.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-border">
-            <p className="text-xxs text-text-tertiary mb-1">Sources:</p>
-            <div className="flex flex-wrap gap-1">
-              {message.sources.map((source, i) => (
-                <span key={i} className="px-1.5 py-0.5 text-xxs bg-bg-hover text-text-secondary rounded">
-                  {source}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// Chat View Component
-// =============================================================================
-
-function ChatView() {
-  const [messages, setMessages] = useState<ChatMessageData[]>([]);
-  const [input, setInput] = useState("");
-  const [isConnected, setIsConnected] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingContent, setStreamingContent] = useState("");
-  const [sessionId] = useState(() => crypto.randomUUID());
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const streamingContentRef = useRef("");
-
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingContent]);
-
-  // Connect to WebSocket on mount
-  useEffect(() => {
-    api.connectChat(sessionId, {
-      onStart: () => {
-        setIsStreaming(true);
-        setStreamingContent("");
-        streamingContentRef.current = "";
-      },
-      onToken: (token) => {
-        streamingContentRef.current += token;
-        setStreamingContent(streamingContentRef.current);
-      },
-      onSources: (sources) => {
-        // Update the last assistant message with sources
-        setMessages(prev => {
-          const updated = [...prev];
-          // Find last assistant message index (ES5 compatible)
-          let lastAssistant = -1;
-          for (let i = updated.length - 1; i >= 0; i--) {
-            if (updated[i].role === "assistant") {
-              lastAssistant = i;
-              break;
-            }
-          }
-          if (lastAssistant >= 0) {
-            updated[lastAssistant] = { ...updated[lastAssistant], sources };
-          }
-          return updated;
-        });
-      },
-      onEnd: () => {
-        setIsStreaming(false);
-        // Add the streamed content as a complete message using ref
-        const content = streamingContentRef.current;
-        if (content) {
-          setMessages(prev => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: content,
-              timestamp: new Date(),
-            }
-          ]);
-        }
-        setStreamingContent("");
-        streamingContentRef.current = "";
-      },
-      onError: (error) => {
-        console.error("Chat error:", error);
-        setIsStreaming(false);
-        setMessages(prev => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: `Error: ${error}`,
-            timestamp: new Date(),
-          }
-        ]);
-        setStreamingContent("");
-        streamingContentRef.current = "";
-      },
-      onClose: () => {
-        setIsConnected(false);
-      },
-    });
-    setIsConnected(true);
-
-    return () => {
-      api.disconnectChat();
-    };
-  }, [sessionId]);
-
-  // Handle sending a message
-  const handleSend = useCallback(() => {
-    if (!input.trim() || isStreaming) return;
-
-    const userMessage: ChatMessageData = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: input.trim(),
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    api.sendChatMessage(input.trim());
-    setInput("");
-    inputRef.current?.focus();
-  }, [input, isStreaming]);
-
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const handleNewChat = () => {
-    setMessages([]);
-    setStreamingContent("");
-    setInput("");
-    inputRef.current?.focus();
-  };
-
-  return (
-    <div className="flex flex-col h-[calc(100vh-49px)]">
-      {/* Chat Header */}
-      <div className="px-6 py-3 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
-            {Icons.sparkles}
-          </div>
-          <div>
-            <h2 className="text-sm font-medium text-white">Ask AI</h2>
-            <p className="text-xxs text-text-tertiary">
-              {isConnected ? "Connected" : "Connecting..."}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={handleNewChat}
-          className="flex items-center gap-1.5 px-2 py-1 text-xs text-text-tertiary hover:text-white hover:bg-bg-hover rounded transition-colors"
-        >
-          {Icons.newChat}
-          New chat
-        </button>
-      </div>
-
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        {messages.length === 0 && !isStreaming ? (
-          <div className="h-full flex flex-col items-center justify-center text-center">
-            <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 mb-4">
-              {Icons.sparkles}
-            </div>
-            <h3 className="text-sm font-medium text-white mb-1">Ask anything about your documents</h3>
-            <p className="text-xs text-text-tertiary max-w-sm">
-              I can help you find information, summarize content, or answer questions based on your connected sources.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-2 justify-center">
-              {[
-                "What meetings do I have this week?",
-                "Summarize recent emails from Jeff",
-                "What companies are in HubSpot?",
-              ].map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => {
-                    setInput(suggestion);
-                    inputRef.current?.focus();
-                  }}
-                  className="px-3 py-1.5 text-xs text-text-secondary bg-bg-tertiary hover:bg-bg-hover rounded-full transition-colors"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="max-w-2xl mx-auto space-y-4">
-            {messages.map((message) => (
-              <ChatMessageBubble key={message.id} message={message} />
-            ))}
-            {isStreaming && streamingContent && (
-              <div className="flex gap-3">
-                <div className="w-7 h-7 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 text-purple-400">
-                  {Icons.sparkles}
-                </div>
-                <div className="max-w-[80%] rounded-lg px-3 py-2 bg-bg-tertiary text-white">
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{streamingContent}</p>
-                  <span className="inline-block w-2 h-4 bg-purple-400 animate-pulse ml-0.5" />
-                </div>
-              </div>
-            )}
-            {isStreaming && !streamingContent && (
-              <div className="flex gap-3">
-                <div className="w-7 h-7 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 text-purple-400">
-                  {Icons.sparkles}
-                </div>
-                <div className="rounded-lg px-3 py-2 bg-bg-tertiary">
-                  <div className="flex items-center gap-1">
-                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        )}
-      </div>
-
-      {/* Input Area */}
-      <div className="px-6 py-4 border-t border-border">
-        <div className="max-w-2xl mx-auto">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-            className="relative"
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onInput={(e) => setInput((e.target as HTMLInputElement).value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask a question about your documents..."
-              disabled={isStreaming}
-              className="w-full h-10 pl-4 pr-12 text-sm bg-bg-tertiary border border-border rounded-lg text-white placeholder-text-tertiary focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || isStreaming}
-              className={cn(
-                "absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors",
-                input.trim() && !isStreaming
-                  ? "text-purple-400 hover:bg-purple-500/20"
-                  : "text-text-tertiary cursor-not-allowed"
-              )}
-            >
-              {Icons.send}
-            </button>
-          </form>
-          <p className="mt-2 text-xxs text-text-tertiary text-center">
-            AI responses are based on your connected documents. Results may not always be accurate.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// Offline State Component
-// =============================================================================
-
-function OfflineState({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-bg">
-      <div className="max-w-sm w-full text-center px-6">
-        <div className="w-10 h-10 mx-auto mb-4 rounded-lg bg-bg-tertiary flex items-center justify-center text-text-tertiary">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <h1 className="text-sm font-medium text-white mb-1">Server Offline</h1>
-        <p className="text-xs text-text-tertiary mb-4">
-          Start the OSlash Local server to continue.
-        </p>
-        <code className="block px-3 py-2 text-xxs text-text-secondary bg-bg-secondary rounded-md border border-border font-mono mb-4">
-          python -m oslash
-        </code>
-        <button
-          onClick={onRetry}
-          className="px-3 py-1.5 text-xs font-medium text-black bg-white hover:bg-gray-200 rounded-md transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// Loading State Component
-// =============================================================================
-
-function LoadingState() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-bg">
-      <div className="flex items-center gap-2 text-sm text-text-tertiary">
-        <svg className="w-4 h-4 animate-spin" viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="28" strokeDashoffset="7" strokeLinecap="round"/>
-        </svg>
-        <span>Loading...</span>
-      </div>
-    </div>
-  );
-}
+// Source icons mapping
+const sourceIcons: Record<string, string> = {
+  gmail: "/icons/gmail.png",
+  gdrive: "/icons/gdrive.png",
+  gpeople: "/icons/gpeople.svg",
+  hubspot: "/icons/hubspot.svg",
+  slack: "/icons/slack.svg",
+};
 
 // =============================================================================
 // Main App Component
 // =============================================================================
 
 export function App() {
+  // Server state
   const [status, setStatus] = useState<ServerStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [currentView, setCurrentView] = useState<View>("search");
+  
+  // Theme
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('oslash-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+      if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+    }
+    return 'dark';
+  });
   
   // Search state
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchTime, setSearchTime] = useState(0);
-  const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [activeSource, setActiveSource] = useState<string | null>(null);
+  
+  // AI Chat state
+  const [aiInput, setAiInput] = useState("");
+  const [aiResponse, setAiResponse] = useState("");
+  const [isAiStreaming, setIsAiStreaming] = useState(false);
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const streamingContentRef = useRef("");
+  
+  // Settings panel
+  const [showSettings, setShowSettings] = useState(false);
+  
+  // Input refs
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const aiInputRef = useRef<HTMLInputElement>(null);
+
+  // =============================================================================
+  // Effects
+  // =============================================================================
 
   // Fetch server status
   const fetchStatus = useCallback(async () => {
@@ -815,24 +133,82 @@ export function App() {
       setIsOnline(true);
     } catch {
       setIsOnline(false);
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
-  // Initial fetch and polling
   useEffect(() => {
     fetchStatus();
     const interval = setInterval(fetchStatus, 10000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
-  // Handle search
+  // Apply theme
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light');
+    } else {
+      root.classList.remove('light');
+    }
+    localStorage.setItem('oslash-theme', theme);
+  }, [theme]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (e.key === 'Escape') {
+        setShowSettings(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+
+  // Connect to AI WebSocket
+  useEffect(() => {
+    api.connectChat(sessionId, {
+      onStart: () => {
+        setIsAiStreaming(true);
+        setAiResponse("");
+        streamingContentRef.current = "";
+      },
+      onToken: (token) => {
+        streamingContentRef.current += token;
+        setAiResponse(streamingContentRef.current);
+      },
+      onEnd: () => {
+        setIsAiStreaming(false);
+      },
+      onError: (error) => {
+        setAiResponse(`Error: ${error}`);
+        setIsAiStreaming(false);
+      },
+    });
+
+    return () => api.disconnectChat();
+  }, [sessionId]);
+
+  // =============================================================================
+  // Handlers
+  // =============================================================================
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  }, []);
+
+  // Search handler
   const handleSearch = useCallback(async (query: string, sources?: string[]) => {
-    setSearchQuery(query);
-    setActiveSource(sources?.[0] ?? null);
-    setIsSearching(true);
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
     
+    setIsSearching(true);
     try {
       const response: SearchResponse = await api.search(query, { sources });
       setSearchResults(response.results);
@@ -845,29 +221,78 @@ export function App() {
     }
   }, []);
 
-  // Handle connect source
+  // Handle URL query parameter for search (e.g., ?q=search-term)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const queryParam = params.get('q');
+    if (queryParam) {
+      setSearchQuery(queryParam);
+      // Trigger search after a short delay to ensure everything is loaded
+      setTimeout(() => {
+        handleSearch(queryParam);
+      }, 100);
+      // Clear the URL parameter without reload
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [handleSearch]);
+
+  // Debounced search
+  const debouncedSearch = useCallback(
+    debounce((q: string) => {
+      const parsed = parseQuery(q);
+      if (parsed.query.length >= 2) {
+        const sources = parsed.source ? [parsed.source] : undefined;
+        setActiveSource(parsed.source);
+        handleSearch(parsed.query, sources);
+      } else {
+        setSearchResults([]);
+        setActiveSource(null);
+      }
+    }, 300),
+    [handleSearch]
+  );
+
+  const handleSearchInput = (e: Event) => {
+    const value = (e.target as HTMLInputElement).value;
+    setSearchQuery(value);
+    debouncedSearch(value);
+  };
+
+  // AI Chat handler
+  const handleAiSubmit = (e: Event) => {
+    e.preventDefault();
+    if (!aiInput.trim() || isAiStreaming) return;
+    
+    api.sendChatMessage(aiInput);
+    setAiInput("");
+  };
+
+  // Connect source
   const handleConnect = useCallback(async (sourceId: Source) => {
     try {
       const result = await api.connectSource(sourceId);
       if (result.auth_url) {
-        window.open(result.auth_url, "_blank");
+        window.open(result.auth_url, '_blank', 'width=600,height=700');
       }
     } catch (error) {
       console.error("Connect error:", error);
     }
   }, []);
 
-  // Handle sync source
+  // Sync source
   const handleSyncSource = useCallback(async (sourceId: Source) => {
+    setIsSyncing(true);
     try {
-      await api.syncSource(sourceId, false);
-      setTimeout(fetchStatus, 1000);
+      await api.syncSource(sourceId);
+      await fetchStatus();
     } catch (error) {
       console.error("Sync error:", error);
+    } finally {
+      setIsSyncing(false);
     }
   }, [fetchStatus]);
 
-  // Handle disconnect source
+  // Disconnect source
   const handleDisconnect = useCallback(async (sourceId: Source) => {
     try {
       await api.disconnectSource(sourceId);
@@ -877,132 +302,310 @@ export function App() {
     }
   }, [fetchStatus]);
 
-  // Handle sync all
+  // Sync all
   const handleSyncAll = useCallback(async () => {
     setIsSyncing(true);
     try {
-      await api.syncAll(false);
-      setTimeout(() => {
-        fetchStatus();
-        setIsSyncing(false);
-      }, 2000);
+      await api.syncAll();
+      await fetchStatus();
     } catch (error) {
       console.error("Sync all error:", error);
+    } finally {
       setIsSyncing(false);
     }
   }, [fetchStatus]);
 
-  // Loading state
-  if (isLoading) {
-    return <LoadingState />;
-  }
-
-  // Offline state
-  if (!isOnline) {
-    return <OfflineState onRetry={fetchStatus} />;
-  }
+  // =============================================================================
+  // Render
+  // =============================================================================
 
   const connectedCount = Object.values(status?.accounts ?? {}).filter(a => a.connected).length;
 
   return (
-    <div className="min-h-screen bg-bg">
-      <Sidebar 
-        isOnline={isOnline} 
-        version={status?.version ?? "0.1.0"}
-        connectedCount={connectedCount}
-        totalDocs={status?.total_documents ?? 0}
-        currentView={currentView}
-        onViewChange={setCurrentView}
-      />
-
-      <main className="ml-52 min-h-screen">
-        {currentView === "chat" ? (
-          <ChatView />
-        ) : (
-          <>
-            {/* Header */}
-            <header className="sticky top-0 z-10 bg-bg border-b border-border">
-              <div className="px-6 py-3 flex items-center justify-between">
-                <h1 className="text-sm font-medium text-white">Search</h1>
-                <a 
-                  href="/docs" 
-                  target="_blank"
-                  className="flex items-center gap-1.5 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
-                >
-                  API Docs
-                  {Icons.external}
-                </a>
-              </div>
-            </header>
-
-            <div className="max-w-2xl mx-auto px-6 py-6">
-              {/* Search */}
-              <SearchBar onSearch={handleSearch} isSearching={isSearching} activeSource={activeSource} />
-
-              {/* Search Results */}
-              {searchQuery ? (
-                <div className="mt-6">
-                  <SearchResults 
-                    results={searchResults} 
-                    searchTime={searchTime} 
-                    query={searchQuery}
-                    activeSource={activeSource}
-                  />
-                </div>
-              ) : (
-                <>
-                  {/* Connected Accounts */}
-                  <div className="mt-8">
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Connected Accounts</h2>
-                      <button
-                        onClick={handleSyncAll}
-                        disabled={isSyncing || connectedCount === 0}
-                        className={cn(
-                          "flex items-center gap-1.5 px-2 py-1 text-xs text-text-tertiary hover:text-white hover:bg-bg-hover rounded transition-colors",
-                          (isSyncing || connectedCount === 0) && "opacity-50 cursor-not-allowed"
-                        )}
-                      >
-                        <span className={isSyncing ? "animate-spin" : ""}>{Icons.sync}</span>
-                        {isSyncing ? "Syncing..." : "Sync all"}
-                      </button>
-                    </div>
-
-                    <div className="border border-border rounded-lg divide-y divide-border">
-                      {SOURCES.map((source) => (
-                        <AccountRow
-                          key={source.id}
-                          source={source}
-                          account={status?.accounts?.[source.id]}
-                          onConnect={() => handleConnect(source.id)}
-                          onSync={() => handleSyncSource(source.id)}
-                          onDisconnect={() => handleDisconnect(source.id)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="mt-8 grid grid-cols-3 gap-4">
-                    <div className="px-4 py-3 bg-bg-secondary rounded-lg border border-border">
-                      <div className="text-lg font-medium text-white tabular-nums">{connectedCount}</div>
-                      <div className="text-xxs text-text-tertiary">Connected</div>
-                    </div>
-                    <div className="px-4 py-3 bg-bg-secondary rounded-lg border border-border">
-                      <div className="text-lg font-medium text-white tabular-nums">{formatNumber(status?.total_documents ?? 0)}</div>
-                      <div className="text-xxs text-text-tertiary">Documents</div>
-                    </div>
-                    <div className="px-4 py-3 bg-bg-secondary rounded-lg border border-border">
-                      <div className="text-lg font-medium text-white tabular-nums">{formatNumber(status?.total_chunks ?? 0)}</div>
-                      <div className="text-xxs text-text-tertiary">Chunks</div>
-                    </div>
-                  </div>
-                </>
-              )}
+    <div className="min-h-screen bg-bg flex flex-col">
+      {/* Header */}
+      <header className="flex-shrink-0 border-b border-border bg-bg-secondary/50 backdrop-blur-sm">
+        <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center text-white text-xs font-bold">
+              o/
             </div>
-          </>
-        )}
+            <span className="text-sm font-medium text-fg">OSlash</span>
+            <span className={cn(
+              "px-1.5 py-0.5 text-xxs rounded-full",
+              isOnline 
+                ? "bg-green-500/10 text-green-500" 
+                : "bg-red-500/10 text-red-500"
+            )}>
+              {isOnline ? "Online" : "Offline"}
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-md hover:bg-bg-hover text-fg-secondary hover:text-fg transition-colors"
+              title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            >
+              {theme === 'dark' ? Icons.sun : Icons.moon}
+            </button>
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={cn(
+                "p-2 rounded-md hover:bg-bg-hover text-fg-secondary hover:text-fg transition-colors",
+                showSettings && "bg-bg-hover text-fg"
+              )}
+              title="Settings"
+            >
+              {Icons.settings}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col max-w-5xl mx-auto w-full px-6 py-6">
+        {/* Search Bar */}
+        <div className="relative mb-6">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-fg-tertiary">
+            {isSearching ? (
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="28" strokeDashoffset="7" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              Icons.search
+            )}
+          </div>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onInput={handleSearchInput}
+            placeholder="Search your files... (⌘K)"
+            className="w-full h-12 pl-12 pr-4 text-base bg-bg-secondary border border-border rounded-xl text-fg placeholder-text-tertiary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-all"
+          />
+          {activeSource && (
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 px-2 py-1 bg-accent/10 text-accent rounded-md text-xs">
+              <img src={sourceIcons[activeSource]} alt="" className="w-3.5 h-3.5" />
+              {getSourceDisplayName(activeSource)}
+            </div>
+          )}
+        </div>
+
+        {/* Results Cards or Empty State */}
+        <div className="flex-1 overflow-auto">
+          {searchQuery && searchResults.length > 0 ? (
+            <ResultsGrid results={searchResults} searchTime={searchTime} />
+          ) : searchQuery ? (
+            <div className="flex-1 flex items-center justify-center py-16">
+              <p className="text-fg-tertiary">No results found for "{searchQuery}"</p>
+            </div>
+          ) : (
+            /* Empty State - Show Connected Sources */
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {SOURCES.map((source) => {
+                  const account = status?.accounts?.[source.id];
+                  const isConnected = account?.connected;
+                  
+                  return (
+                    <div
+                      key={source.id}
+                      className={cn(
+                        "p-4 rounded-xl border transition-all",
+                        isConnected 
+                          ? "bg-bg-secondary border-border hover:border-accent/50" 
+                          : "bg-bg-tertiary/50 border-border/50"
+                      )}
+                    >
+                      <div className="flex items-center gap-3 mb-3">
+                        <img src={source.icon} alt="" className="w-8 h-8" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-medium text-fg">{source.name}</span>
+                            {isConnected && (
+                              <span className="text-green-500">{Icons.check}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {isConnected ? (
+                        <div className="space-y-2">
+                          <p className="text-xs text-fg-tertiary truncate">{account?.email}</p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-fg-secondary">
+                              {formatNumber(account?.document_count ?? 0)} items
+                            </span>
+                            <button
+                              onClick={() => handleSyncSource(source.id)}
+                              className="p-1 rounded hover:bg-bg-hover text-fg-tertiary hover:text-fg transition-colors"
+                              title="Sync"
+                            >
+                              <span className={isSyncing ? "animate-spin block" : ""}>{Icons.sync}</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleConnect(source.id)}
+                          className="w-full py-1.5 text-xs font-medium text-accent hover:bg-accent/10 rounded-md transition-colors"
+                        >
+                          Connect
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Quick Stats */}
+              <div className="flex items-center justify-center gap-8 py-4 text-sm text-fg-secondary">
+                <span>{connectedCount} sources connected</span>
+                <span>·</span>
+                <span>{formatNumber(status?.total_documents ?? 0)} documents</span>
+                <span>·</span>
+                <span>{formatNumber(status?.total_chunks ?? 0)} chunks indexed</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* AI Chat Section - Fixed at Bottom */}
+        <div className="flex-shrink-0 mt-6 pt-6 border-t border-border">
+          {/* AI Response */}
+          {aiResponse && (
+            <div className="mb-4 p-4 bg-bg-secondary border border-border rounded-xl">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center text-accent flex-shrink-0">
+                  {Icons.sparkles}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-fg whitespace-pre-wrap leading-relaxed">{aiResponse}</p>
+                  {isAiStreaming && (
+                    <span className="inline-block w-1.5 h-4 bg-accent animate-pulse ml-0.5" />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* AI Input */}
+          <form onSubmit={handleAiSubmit} className="relative">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-accent">
+              {Icons.sparkles}
+            </div>
+            <input
+              ref={aiInputRef}
+              type="text"
+              value={aiInput}
+              onInput={(e) => setAiInput((e.target as HTMLInputElement).value)}
+              placeholder="Ask AI about your files..."
+              disabled={isAiStreaming}
+              className="w-full h-12 pl-12 pr-14 text-base bg-bg-secondary border border-accent/30 rounded-xl text-fg placeholder-text-tertiary focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50 transition-all"
+            />
+            <button
+              type="submit"
+              disabled={!aiInput.trim() || isAiStreaming}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {Icons.send}
+            </button>
+          </form>
+        </div>
       </main>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSettings(false)}>
+          <div 
+            className="w-full max-w-md bg-bg border border-border rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <h2 className="text-lg font-medium text-fg">Settings</h2>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="p-1 rounded hover:bg-bg-hover text-fg-tertiary hover:text-fg transition-colors"
+              >
+                {Icons.close}
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Connected Accounts */}
+              <div>
+                <h3 className="text-sm font-medium text-fg mb-3">Connected Accounts</h3>
+                <div className="space-y-2">
+                  {SOURCES.map((source) => {
+                    const account = status?.accounts?.[source.id];
+                    const isConnected = account?.connected;
+                    
+                    return (
+                      <div key={source.id} className="flex items-center justify-between py-2">
+                        <div className="flex items-center gap-3">
+                          <img src={source.icon} alt="" className="w-5 h-5" />
+                          <div>
+                            <span className="text-sm text-fg">{source.name}</span>
+                            {isConnected && account?.email && (
+                              <p className="text-xs text-fg-tertiary">{account.email}</p>
+                            )}
+                          </div>
+                        </div>
+                        {isConnected ? (
+                          <button
+                            onClick={() => handleDisconnect(source.id)}
+                            className="text-xs text-red-500 hover:text-red-400 transition-colors"
+                          >
+                            Disconnect
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleConnect(source.id)}
+                            className="text-xs text-accent hover:text-accent-hover transition-colors"
+                          >
+                            Connect
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              {/* Sync */}
+              <div>
+                <h3 className="text-sm font-medium text-fg mb-3">Data Sync</h3>
+                <button
+                  onClick={handleSyncAll}
+                  disabled={isSyncing || connectedCount === 0}
+                  className="w-full py-2 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSyncing ? "Syncing..." : "Sync All Sources"}
+                </button>
+              </div>
+              
+              {/* Stats */}
+              <div className="pt-4 border-t border-border">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-xl font-medium text-fg">{connectedCount}</div>
+                    <div className="text-xs text-fg-tertiary">Sources</div>
+                  </div>
+                  <div>
+                    <div className="text-xl font-medium text-fg">{formatNumber(status?.total_documents ?? 0)}</div>
+                    <div className="text-xs text-fg-tertiary">Documents</div>
+                  </div>
+                  <div>
+                    <div className="text-xl font-medium text-fg">{formatNumber(status?.total_chunks ?? 0)}</div>
+                    <div className="text-xs text-fg-tertiary">Chunks</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

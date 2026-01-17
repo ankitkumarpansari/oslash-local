@@ -21,6 +21,7 @@ async def run_connector_sync(source: str, full: bool = False) -> SyncResult:
         create_gmail_connector,
         create_slack_connector,
         create_hubspot_connector,
+        create_gpeople_connector,
     )
 
     # Create the appropriate connector
@@ -32,6 +33,8 @@ async def run_connector_sync(source: str, full: bool = False) -> SyncResult:
         connector = create_slack_connector()
     elif source == "hubspot":
         connector = create_hubspot_connector()
+    elif source == "gpeople":
+        connector = create_gpeople_connector()
     else:
         return SyncResult(
             success=False,
@@ -108,7 +111,7 @@ async def run_sync_task(source: Source, full: bool = False) -> SyncResult:
             await crud.update_sync_state(db, source_name, status="syncing")
 
         # Run the appropriate connector
-        if source in [Source.GDRIVE, Source.GMAIL, Source.SLACK, Source.HUBSPOT]:
+        if source in [Source.GDRIVE, Source.GMAIL, Source.SLACK, Source.HUBSPOT, Source.GPEOPLE]:
             result = await run_connector_sync(source.value, full)
         else:
             result = SyncResult(success=False, source=source, errors=["Unknown source"])

@@ -242,7 +242,7 @@ class Settings(BaseSettings):
         """Get list of configured sources."""
         sources = []
         if self.has_google_oauth():
-            sources.extend(["gdrive", "gmail"])
+            sources.extend(["gdrive", "gmail", "gpeople"])
         if self.has_slack_oauth():
             sources.append("slack")
         if self.has_hubspot():

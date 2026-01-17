@@ -50,6 +50,19 @@ OAUTH_CONFIGS = {
         "client_id_key": "google_client_id",
         "client_secret_key": "google_client_secret",
     },
+    Source.GPEOPLE: {
+        "name": "Google People",
+        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "userinfo_url": "https://www.googleapis.com/oauth2/v2/userinfo",
+        "scopes": [
+            "https://www.googleapis.com/auth/directory.readonly",
+            "https://www.googleapis.com/auth/contacts.readonly",
+            "https://www.googleapis.com/auth/userinfo.email",
+        ],
+        "client_id_key": "google_client_id",
+        "client_secret_key": "google_client_secret",
+    },
     Source.SLACK: {
         "name": "Slack",
         "auth_url": "https://slack.com/oauth/v2/authorize",
@@ -200,7 +213,7 @@ async def get_auth_url(provider: Source) -> AuthUrlResponse:
     }
 
     # Google-specific: request offline access for refresh token
-    if provider in [Source.GDRIVE, Source.GMAIL]:
+    if provider in [Source.GDRIVE, Source.GMAIL, Source.GPEOPLE]:
         params["access_type"] = "offline"
         params["prompt"] = "consent"  # Force consent to get refresh token
 
